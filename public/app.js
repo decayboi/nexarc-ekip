@@ -228,6 +228,24 @@ socket.on('screen-state', ({ userId, sharing }) => {
 socket.on('signal', ({ from, pcType, data }) => handleSignal(from, pcType, data));
 
 /* ============================================================
+   MOBİL MENÜ (hamburger → kanal çekmecesi)
+   ============================================================ */
+function closeMenu() {
+  document.body.classList.remove('menu-open');
+  const ov = $('#menu-overlay');
+  if (ov) ov.classList.add('hidden');
+}
+const menuBtn = $('#mobile-menu-btn');
+const menuOverlay = $('#menu-overlay');
+if (menuBtn) {
+  menuBtn.onclick = () => {
+    const open = document.body.classList.toggle('menu-open');
+    if (menuOverlay) menuOverlay.classList.toggle('hidden', !open);
+  };
+}
+if (menuOverlay) menuOverlay.onclick = closeMenu;
+
+/* ============================================================
    KANAL ARAYÜZÜ
    ============================================================ */
 function renderChannels() {
@@ -280,6 +298,7 @@ function renderMembers() {
 }
 
 function selectTextChannel(channelId) {
+  closeMenu(); // mobilde çekmece kapansın
   state.textChannel = channelId;
   renderChannels();
   setTitle(state.channels.find((c) => c.id === channelId)?.name || '', '#');
@@ -668,6 +687,7 @@ function removePeer(peerId) {
    SES KANALI KONTROLLERİ
    ============================================================ */
 function joinVoice(channelId) {
+  closeMenu(); // mobilde çekmece kapansın
   state.wantedVoice = channelId;
   socket.emit('voice-join', { channelId });
 }
