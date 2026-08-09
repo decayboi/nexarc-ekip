@@ -1068,7 +1068,22 @@ function renderVoiceGrid() {
     }
     grid.appendChild(el);
   }
-  // Kamera kartları (uzaktan gelenler)
+  // Kamera kartları (kendi kameran + uzaktan gelenler)
+  if (state.cameraOn && state.cameraStream) {
+    const card = document.createElement('div');
+    card.className = 'cam-card self-cam';
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    video.muted = true;
+    video.srcObject = state.cameraStream;
+    video.play().catch(() => {});
+    const name = document.createElement('div');
+    name.className = 'cam-name';
+    name.textContent = 'Sen 📷';
+    card.append(video, name);
+    grid.appendChild(card);
+  }
   for (const [peerId, stream] of state.cams) {
     const user = state.users.get(peerId);
     const card = document.createElement('div');
