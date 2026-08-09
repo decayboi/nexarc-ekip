@@ -9,3 +9,5 @@ Thumbs.db
 # Loglar
 *.log
 public/uploads/
+accounts.json
+public/uploads/

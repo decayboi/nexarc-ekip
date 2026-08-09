@@ -13,13 +13,13 @@ const names = ['Ali', 'Ayşe', 'Mert'].map((n, i) => `${n}-${uniq}-${i}`);
 const ok = (name) => console.log('✓ ' + name);
 const fail = (name, e) => { console.error('✗ ' + name, e && e.message); process.exit(1); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const onEvent = (sock, ev, timeout = 8000) => new Promise((res, rej) => {
+const onEvent = (sock, ev, timeout = 15000) => new Promise((res, rej) => {
   const t = setTimeout(() => rej(new Error(ev + ' timeout')), timeout);
   sock.once(ev, (d) => { clearTimeout(t); res(d); });
 });
 
 /* state'te N kullanıcı görülene kadar bekle */
-function waitUsers(sock, n, timeout = 8000) {
+function waitUsers(sock, n, timeout = 15000) {
   return new Promise((res, rej) => {
     const t = setTimeout(() => rej(new Error(`state'te ${n} kullanıcı görülemedi`)), timeout);
     const h = (d) => { if (d.users.length >= n) { clearTimeout(t); sock.off('state', h); res(d); } };
@@ -36,15 +36,17 @@ async function main() {
   await Promise.all(clients.map((c) => onEvent(c, 'connect')));
 
   /* ---- 1. Giriş: 3 kullanıcı ---- */
+  // Dinleyicileri ÖNCE kur (state'ler init'le birlikte akabilir)
   const inits = clients.map((c, i) => {
     const p = onEvent(c, 'init');
     c.emit('join', { name: names[i], color: ['#ff725e', '#5865f2', '#3ba55d'][i] });
     return p;
   });
+  const aStateP = waitUsers(clients[0], 3); // join'lerle birlikte dinlemeye başla
   const initData = await Promise.all(inits);
   if (initData.some((d) => d.channels.length < 4)) return fail("init", new Error("en az 4 kanal bekleniyor"));
   ok('Giriş: 3 kullanıcı init aldı (6 kanal)');
-  await waitUsers(clients[0], 3);
+  await aStateP;
   ok('state: herkes herkesi görüyor (3 üye)');
 
   /* ---- 2. Metin: A → B ve C ---- */

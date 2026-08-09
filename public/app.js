@@ -56,6 +56,11 @@ const ICON = {
   micOff: '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 3l18 18" stroke="#f23f43" stroke-width="2" stroke-linecap="round"/><rect x="9" y="2.5" width="6" height="11" rx="3" fill="currentColor"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3.5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>',
   share: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M8 21h8M12 16.5V21"/><path d="M10.5 9.5l4 2.5-4 2.5z" fill="currentColor" stroke="none"/></svg>',
   expand: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+  reply: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17l-5-5 5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>',
+  react: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M5 17h14M7 17l1.5-9h7L17 17M9 8V4h6v4"/></svg>',
+  cam: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7 16 12l7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>',
   leave: '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.7 2z" fill="currentColor"/></svg>',
 };
 
@@ -73,10 +78,23 @@ const state = {
   voicePCs: new Map(),   // peerId -> { pc, makingOffer, ignoreOffer, polite }  (ses, karşılıklı)
   screenSendPCs: new Map(), // peerId -> meta — BEN bu eşe ekranımı gönderiyorum
   screenRecvPCs: new Map(), // peerId -> meta — BU EŞ bana ekranını gönderiyor
+  camSendPCs: new Map(), // peerId -> meta — BEN kameramı gönderiyorum
+  camRecvPCs: new Map(), // peerId -> meta — BU EŞ kamerasını gönderiyor
   pendingCands: new Map(),  // 'wireTipi:peerId' -> [candidate...] (yarışı önlemek için)
   audioEls: new Map(),   // peerId -> <audio>
   screens: new Map(),    // sharerId -> MediaStream (uzaktan gelen ekranlar)
+  cams: new Map(),       // peerId -> MediaStream (uzaktan gelen kameralar)
+  cameraStream: null,
+  cameraOn: false,
   joined: false,
+  status: 'online',
+  speaking: new Set(),   // konuşan peer id'leri
+  analysers: new Map(),  // peerId -> AnalyserNode
+  audioCtx: null,
+  typingTimers: new Map(), // userId -> timeout
+  typingUsers: new Map(),  // userId -> name (yazıyor göstergesi)
+  pendingReply: null,    // { id, name, text }
+  pins: [],
 };
 
 // Test/debug için dışarıdan erişim
@@ -237,8 +255,11 @@ function openProfile() {
   $('#prof-note').textContent = isAccount
     ? 'Hesabınla girişli — değişiklikler kalıcıdır.'
     : 'Misafirsin — değişiklikler yalnızca bu oturumda geçerli.';
+  const stSel = $('#prof-status');
+  if (stSel) stSel.value = state.self.status || 'online';
   buildColorPicker('#prof-color-picker');
   buildAvatarPicker('#prof-avatar-pick');
+  populateDevices();
   $('#profile-modal').classList.remove('hidden');
 }
 function closeProfile() { $('#profile-modal').classList.add('hidden'); }
@@ -246,11 +267,14 @@ function closeProfile() { $('#profile-modal').classList.add('hidden'); }
 $('#profile-btn').onclick = openProfile;
 $('#prof-close').onclick = closeProfile;
 $('#profile-modal').addEventListener('click', (e) => { if (e.target === $('#profile-modal')) closeProfile(); });
+const profDeviceSel = $('#prof-device');
+if (profDeviceSel) profDeviceSel.onchange = () => setPreferredMic(profDeviceSel.value);
 
 $('#prof-save').onclick = () => {
   const displayName = $('#prof-display').value.trim();
   if (!displayName) { toast('Görünen ad boş olamaz'); return; }
-  socket.emit('update-profile', { displayName, color: chosenColor, avatar: chosenAvatar }, (res) => {
+  const status = $('#prof-status') ? $('#prof-status').value : 'online';
+  socket.emit('update-profile', { displayName, color: chosenColor, avatar: chosenAvatar, status }, (res) => {
     if (res && res.ok) {
       state.self = { ...state.self, ...res.user };
       toast('Profil güncellendi');
@@ -331,17 +355,21 @@ socket.on('chat', (msg) => {
 socket.on('voice-joined', async ({ channelId, occupants }) => {
   state.voiceChannel = channelId;
   try {
-    state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const devId = preferredMic();
+    state.localStream = await navigator.mediaDevices.getUserMedia(devId ? { audio: { deviceId: { exact: devId } } } : { audio: true });
     state.micOn = true;
+    attachAnalyser('self', state.localStream);
   } catch (e) {
     state.localStream = null;
     toast('Mikrofon izni alınamadı — yalnızca dinleme modu');
   }
   updateMicUI();
+  updateCamUI();
   for (const occ of occupants) connectVoicePeer(occ);
   showVoiceView();
   renderChannels();
   renderMembers();
+  startSpeakingLoop();
   toast('Ses kanalına katıldın');
 });
 
@@ -393,6 +421,88 @@ socket.on('voice-kicked', ({ channelId }) => {
 socket.on('message-deleted', ({ messageId }) => {
   const el = document.querySelector(`.msg[data-mid="${messageId}"]`);
   if (el) el.remove();
+});
+
+/* --- Mesaj düzenlendi --- */
+socket.on('message-updated', ({ channelId, messageId, text }) => {
+  if (channelId !== state.textChannel) return;
+  const el = document.querySelector(`.msg[data-mid="${messageId}"]`);
+  if (!el) return;
+  const t = el.querySelector('.msg-text');
+  if (t) t.textContent = text;
+  const time = el.querySelector('.msg-time');
+  if (time) time.textContent = fmtTime(Date.now()) + ' (düzenlendi)';
+});
+
+/* --- Mesaja tepki eklendi/çıkarıldı --- */
+socket.on('message-reacted', ({ channelId, messageId, reactions }) => {
+  if (channelId !== state.textChannel) return;
+  const el = document.querySelector(`.msg[data-mid="${messageId}"]`);
+  if (!el) return;
+  let box = el.querySelector('.reactions');
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'reactions';
+    el.querySelector('.msg-body').appendChild(box);
+  }
+  box.innerHTML = '';
+  for (const [emoji, ids] of Object.entries(reactions || {})) {
+    const mine = ids.includes(state.self?.id);
+    const r = document.createElement('span');
+    r.className = 'reaction' + (mine ? ' mine' : '');
+    r.innerHTML = `<span class="rc">${esc(emoji)}</span><span class="cnt">${ids.length}</span>`;
+    r.onclick = () => socket.emit('message-reaction', { channelId, messageId, emoji });
+    box.appendChild(r);
+  }
+});
+
+/* --- Mesaj pinlendi --- */
+socket.on('message-pinned', ({ messageId, pinned }) => {
+  const el = document.querySelector(`.msg[data-mid="${messageId}"]`);
+  if (el) {
+    const btn = el.querySelector('.ma-pin');
+    if (btn) btn.classList.toggle('active', pinned);
+  }
+  toast(pinned ? 'Mesaj sabitlendi 📌' : 'Mesaj sabitleme kaldırıldı');
+});
+
+/* --- Yazıyor göstergesi --- */
+socket.on('typing', ({ channelId, userId, name }) => {
+  if (channelId !== state.textChannel) return;
+  state.typingUsers.set(userId, name);
+  clearTimeout(state.typingTimers.get(userId));
+  state.typingTimers.set(userId, setTimeout(() => { state.typingUsers.delete(userId); renderTyping(); }, 3000));
+  renderTyping();
+});
+function renderTyping() {
+  const el = $('#typing-ind');
+  if (!el) return;
+  const names = [...state.typingUsers.values()];
+  el.textContent = names.length ? names.join(', ') + (names.length > 1 ? ' yazıyor…' : ' yazıyor…') : '';
+}
+
+/* --- Kamera durumu --- */
+socket.on('cam-state', ({ userId, on }) => {
+  if (on) connectCamReceiver(userId);
+  else closeCamPC(userId);
+  renderVoiceGrid();
+  renderMembers();
+});
+
+/* --- Sunucu susturma --- */
+socket.on('voice-muted', ({ userId, muted }) => {
+  const el = state.audioEls.get(userId);
+  if (el) el.muted = muted;
+  renderVoiceGrid();
+});
+
+/* --- DM açıldı --- */
+socket.on('dm-opened', ({ roomId, peer }) => {
+  const ch = { id: roomId, name: '@' + peer.name, type: 'text', dm: true };
+  if (!state.channels.find((c) => c.id === roomId)) state.channels.push(ch);
+  renderChannels();
+  selectTextChannel(roomId);
+  setTitle(peer.name, '@');
 });
 
 /* --- Sinyal --- */
@@ -492,25 +602,80 @@ function renderMembers() {
   for (const u of state.users.values()) {
     const el = document.createElement('div');
     el.className = 'member';
+    el.dataset.uid = u.id;
     const status = u.voiceChannel
       ? (state.channels.find((c) => c.id === u.voiceChannel)?.name || 'ses kanalında')
       : 'Çevrimdışı kanal';
+    const statusDot = { online: '🟢', idle: '🟡', dnd: '🔴' }[u.status] || '🟢';
+    const roleBadge = u.role === 'admin' ? ' <span title="Admin" style="font-size:11px">🛡</span>' : '';
     el.innerHTML = `
-      <span class="avatar" style="background:${esc(u.color)}">${esc(avatarOf(u))}<span class="presence"></span></span>
+      <span class="avatar" style="background:${esc(u.color)}">${esc(avatarOf(u))}<span class="presence" style="background:${u.status === 'online' ? 'var(--green)' : (u.status === 'idle' ? '#faa61a' : '#f23f43')}"></span></span>
       <div class="member-info">
-        <div class="member-name">${esc(u.name)}${u.id === state.self?.id ? ' <span style="color:var(--muted)">(sen)</span>' : ''}</div>
+        <div class="member-name">${statusDot} ${esc(u.name)}${roleBadge}${u.id === state.self?.id ? ' <span style="color:var(--muted)">(sen)</span>' : ''}</div>
         <div class="member-status">${esc(status)}</div>
       </div>
       ${u.sharing ? `<span class="member-icon" title="Ekran paylaşıyor">${ICON.share}</span>` : ''}`;
+    el.onclick = () => openUserCard(u.id);
     box.appendChild(el);
   }
 }
+
+/* ---- Kullanıcı kartı ---- */
+let umUserId = null;
+function openUserCard(userId) {
+  const u = state.users.get(userId);
+  if (!u) return;
+  umUserId = userId;
+  $('#um-avatar').textContent = avatarOf(u);
+  $('#um-avatar').style.background = u.color;
+  $('#um-name').textContent = u.name;
+  $('#um-tag').textContent = u.username ? '@' + u.username : 'Misafir';
+  $('#um-role').innerHTML = u.role === 'admin' ? '🛡 Admin' : 'Üye';
+  $('#um-status').textContent = { online: '🟢 Çevrimiçi', idle: '🟡 Boşta', dnd: '🔴 Rahatsız etmeyin' }[u.status] || '🟢 Çevrimiçi';
+  const inSameVoice = state.voiceChannel && u.voiceChannel === state.voiceChannel && userId !== state.self?.id;
+  const muteBtn = $('#um-mute');
+  if (inSameVoice) {
+    muteBtn.classList.remove('hidden');
+    muteBtn.textContent = u.muted ? 'Sesini Aç' : 'Sustur';
+  } else {
+    muteBtn.classList.add('hidden');
+  }
+  const dmBtn = $('#um-dm');
+  dmBtn.textContent = u.username ? 'Mesaj Gönder' : 'DM yok (hesap gerekli)';
+  dmBtn.disabled = !u.username;
+  $('#user-modal').classList.remove('hidden');
+}
+function closeUserCard() { $('#user-modal').classList.add('hidden'); umUserId = null; }
+$('#um-close').onclick = closeUserCard;
+$('#user-modal').addEventListener('click', (e) => { if (e.target === $('#user-modal')) closeUserCard(); });
+$('#um-dm').onclick = () => {
+  const u = state.users.get(umUserId);
+  if (!u || !u.username) return;
+  socket.emit('dm-open', { username: u.username }, (res) => {
+    if (res && res.ok) {
+      closeUserCard();
+      const ch = { id: res.roomId, name: '@' + res.peer.name, type: 'text', dm: true };
+      if (!state.channels.find((c) => c.id === res.roomId)) state.channels.push(ch);
+      renderChannels();
+      selectTextChannel(res.roomId);
+      setTitle(res.peer.name, '@');
+    } else {
+      toast((res && res.error) || 'DM açılamadı');
+    }
+  });
+};
+$('#um-mute').onclick = () => {
+  const u = state.users.get(umUserId);
+  if (!u) return;
+  socket.emit('voice-mute', { userId: u.id, muted: !u.muted });
+};
 
 function selectTextChannel(channelId) {
   closeMenu(); // mobilde çekmece kapansın
   state.textChannel = channelId;
   renderChannels();
-  setTitle(state.channels.find((c) => c.id === channelId)?.name || '', '#');
+  const ch = state.channels.find((c) => c.id === channelId);
+  setTitle(ch?.name || '', ch?.dm ? '@' : '#');
   $('#voice-view').classList.add('hidden');
   $('#text-view').classList.remove('hidden');
   $('#messages').innerHTML = '<div class="msg system"><div class="msg-text">Yükleniyor…</div></div>';
@@ -535,23 +700,55 @@ function appendMessage(msg, scroll) {
   const el = document.createElement('div');
   el.className = 'msg' + (isOwn ? ' own' : '');
   el.dataset.mid = msg.id;
-  const delBtn = isOwn
-    ? `<button class="msg-del" title="Mesajı sil">🗑</button>`
+  const replyHtml = msg.replyTo
+    ? `<div class="reply-preview" title="${esc(msg.replyTo.text)}"><b>${esc(msg.replyTo.name)}</b> ${esc(msg.replyTo.text)}</div>`
     : '';
+  const edited = msg.edited ? ' <span style="color:var(--muted);font-size:11px">(düzenlendi)</span>' : '';
+  const actions = `
+    <div class="msg-actions">
+      ${isOwn ? `<button class="ma-btn ma-edit" title="Düzenle">${ICON.edit}</button>` : ''}
+      <button class="ma-btn ma-reply" title="Yanıtla">${ICON.reply}</button>
+      <button class="ma-btn ma-react" title="Tepki ekle">${ICON.react}</button>
+      <button class="ma-btn ma-pin ${msg.pinned ? 'active' : ''}" title="Sabitle">${ICON.pin}</button>
+      ${isOwn ? `<button class="ma-btn ma-del danger" title="Sil">${ICON.leave === '' ? '' : ''}🗑</button>` : ''}
+    </div>`;
   el.innerHTML = `
     <span class="avatar" style="background:${esc(msg.user.color)}">${esc(avatarOf(msg.user))}</span>
     <div class="msg-body">
-      <div class="msg-head"><span class="msg-name">${esc(msg.user.name)}</span><span class="msg-time">${fmtTime(msg.ts)}</span></div>
-      ${msg.text ? `<div class="msg-text">${esc(msg.text)}</div>` : ''}
+      ${replyHtml}
+      <div class="msg-head"><span class="msg-name">${esc(msg.user.name)}</span><span class="msg-time">${fmtTime(msg.ts)}${edited}</span></div>
+      <div class="msg-text">${esc(msg.text || '')}</div>
       ${mediaHtml(msg.media)}
-    </div>${delBtn}`;
-  if (isOwn) {
-    const del = el.querySelector('.msg-del');
-    if (del) del.onclick = () => {
-      socket.emit('delete-message', { channelId: state.textChannel, messageId: msg.id }, (res) => {
-        if (!res || !res.ok) toast((res && res.error) || 'Mesaj silinemedi');
-      });
-    };
+    </div>
+    ${actions}`;
+  // Aksiyonlar
+  const editBtn = el.querySelector('.ma-edit');
+  if (editBtn) editBtn.onclick = () => startEditMessage(msg, el);
+  const replyBtn = el.querySelector('.ma-reply');
+  if (replyBtn) replyBtn.onclick = () => setPendingReply(msg);
+  const reactBtn = el.querySelector('.ma-react');
+  if (reactBtn) reactBtn.onclick = (e) => openReactPop(e, msg);
+  const pinBtn = el.querySelector('.ma-pin');
+  if (pinBtn) pinBtn.onclick = () => socket.emit('message-pin', { channelId: state.textChannel, messageId: msg.id });
+  const delBtn = el.querySelector('.ma-del');
+  if (delBtn) delBtn.onclick = () => {
+    socket.emit('delete-message', { channelId: state.textChannel, messageId: msg.id }, (res) => {
+      if (!res || !res.ok) toast((res && res.error) || 'Mesaj silinemedi');
+    });
+  };
+  // Tepkiler
+  if (msg.reactions && Object.keys(msg.reactions).length) {
+    const box2 = document.createElement('div');
+    box2.className = 'reactions';
+    for (const [emoji, ids] of Object.entries(msg.reactions)) {
+      const mine = ids.includes(state.self?.id);
+      const r = document.createElement('span');
+      r.className = 'reaction' + (mine ? ' mine' : '');
+      r.innerHTML = `<span class="rc">${esc(emoji)}</span><span class="cnt">${ids.length}</span>`;
+      r.onclick = () => socket.emit('message-reaction', { channelId: state.textChannel, messageId: msg.id, emoji });
+      box2.appendChild(r);
+    }
+    el.querySelector('.msg-body').appendChild(box2);
   }
   box.appendChild(el);
   // Yeni mesaj görünür olsun: en alttaysan veya tarihçe yüklenirken kaydır
@@ -563,13 +760,108 @@ $('#chat-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const input = $('#chat-input');
   const text = input.value.trim();
-  if ((!text || !state.textChannel)) return;
-  socket.emit('chat', { channelId: state.textChannel, text });
+  if (!text || !state.textChannel) return;
+  const replyTo = state.pendingReply ? { id: state.pendingReply.id } : null;
+  socket.emit('chat', { channelId: state.textChannel, text, replyTo });
   input.value = '';
+  setPendingReply(null);
   input.focus();
   // Kendi mesajını gönderince chat otomatik en alta kayar
   $('#messages').scrollTop = $('#messages').scrollHeight;
 });
+
+/* --- Yazıyor göstergesi gönderimi --- */
+let lastTyping = 0;
+const chatInputEl = $('#chat-input');
+if (chatInputEl) {
+  chatInputEl.addEventListener('input', () => {
+    if (!state.textChannel) return;
+    const now = Date.now();
+    if (now - lastTyping > 1500) {
+      lastTyping = now;
+      socket.emit('typing', { channelId: state.textChannel });
+    }
+  });
+}
+
+/* --- Alıntı (yanıt) çipi --- */
+function setPendingReply(msg) {
+  state.pendingReply = msg ? { id: msg.id, name: msg.user.name, text: msg.text } : null;
+  let chip = $('#reply-chip');
+  if (!msg) {
+    if (chip) chip.remove();
+    return;
+  }
+  if (!chip) {
+    chip = document.createElement('div');
+    chip.id = 'reply-chip';
+    const info = document.createElement('span');
+    info.className = 'rc-info';
+    const cancel = document.createElement('button');
+    cancel.className = 'rc-cancel';
+    cancel.textContent = '✕';
+    cancel.onclick = () => setPendingReply(null);
+    chip.append(info, cancel);
+    document.querySelector('#text-view').insertBefore(chip, $('#chat-form'));
+  }
+  chip.querySelector('.rc-info').textContent = `↩ ${msg.user.name}: ${String(msg.text || 'medya').slice(0, 60)}`;
+  $('#chat-input').focus();
+}
+
+/* --- Mesaj düzenleme --- */
+function startEditMessage(msg, el) {
+  const old = el.querySelector('.msg-text');
+  const box = document.createElement('div');
+  box.className = 'msg-edit-box';
+  box.innerHTML = `<input maxlength="2000" value="${esc(msg.text || '')}" /><button class="mini-btn">Kaydet</button><button class="mini-btn ghost">İptal</button>`;
+  if (old) old.replaceWith(box);
+  const input = box.querySelector('input');
+  input.focus();
+  const done = (save) => {
+    if (save) {
+      socket.emit('message-update', { channelId: state.textChannel, messageId: msg.id, text: input.value }, (res) => {
+        if (!res || !res.ok) toast((res && res.error) || 'Güncellenemedi');
+      });
+    }
+    const t = document.createElement('div');
+    t.className = 'msg-text';
+    t.textContent = save ? input.value : msg.text;
+    box.replaceWith(t);
+  };
+  box.querySelector('.mini-btn').onclick = () => done(true);
+  box.querySelector('.mini-btn.ghost').onclick = () => done(false);
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') done(true);
+    if (ev.key === 'Escape') done(false);
+  });
+}
+
+/* --- Tepki popover --- */
+const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👏', '🤝', '💯', '😍', '😡'];
+function openReactPop(e, msg) {
+  e.stopPropagation();
+  const pop = $('#react-pop');
+  const r = e.currentTarget.getBoundingClientRect();
+  pop.innerHTML = '';
+  REACT_EMOJIS.forEach((em) => {
+    const s = document.createElement('span');
+    s.className = 'emoji-item';
+    s.textContent = em;
+    s.onclick = () => {
+      socket.emit('message-reaction', { channelId: state.textChannel, messageId: msg.id, emoji: em });
+      pop.classList.add('hidden');
+    };
+    pop.appendChild(s);
+  });
+  pop.classList.remove('hidden');
+  pop.style.left = Math.min(r.left, window.innerWidth - 240) + 'px';
+  pop.style.top = (r.bottom + 4) + 'px';
+  setTimeout(() => {
+    document.addEventListener('click', function h(ev2) {
+      if (!pop.contains(ev2.target)) { pop.classList.add('hidden'); document.removeEventListener('click', h); }
+    });
+  }, 0);
+}
 
 /* --- Medya yükleme (📎) --- */
 function fmtSize(bytes) {
@@ -594,6 +886,73 @@ function mediaHtml(m) {
     return `<div class="chat-media"><audio src="${url}" controls preload="metadata"></audio></div>`;
   }
   return `<div class="chat-media"><a class="media-file" href="${url}" download="${name}"><span>📄</span><span class="mf-name">${name}</span><span class="mf-size">${fmtSize(m.size)}</span></a></div>`;
+}
+
+/* ---- Konuşan vurgusu (ses analizi) ---- */
+function attachAnalyser(peerId, stream) {
+  try {
+    const audioTrack = stream.getAudioTracks()[0];
+    if (!audioTrack) return;
+    const ctx = state.audioCtx || (state.audioCtx = new (window.AudioContext || window.webkitAudioContext)());
+    const src = ctx.createMediaStreamSource(stream);
+    const an = ctx.createAnalyser();
+    an.fftSize = 512;
+    an.smoothingTimeConstant = 0.6;
+    src.connect(an);
+    state.analysers.set(peerId, an);
+  } catch (e) { /* sessizce geç */ }
+}
+function startSpeakingLoop() {
+  if (state.speakingLoop) return;
+  state.speakingLoop = setInterval(() => {
+    const buf = new Uint8Array(512);
+    let changed = false;
+    for (const [peerId, an] of state.analysers) {
+      an.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+      const level = Math.sqrt(sum / buf.length);
+      const speaking = level > 0.045;
+      if (speaking !== state.speaking.has(peerId)) {
+        if (speaking) state.speaking.add(peerId); else state.speaking.delete(peerId);
+        changed = true;
+      }
+    }
+    if (changed) {
+      for (const peerId of state.speaking) {
+        const card = document.querySelector(`.voice-card[data-peer="${peerId}"]`);
+        if (card) card.classList.add('speaking');
+      }
+      document.querySelectorAll('.voice-card.speaking').forEach((c) => {
+        if (!state.speaking.has(c.dataset.peer)) c.classList.remove('speaking');
+      });
+    }
+  }, 150);
+}
+
+/* ---- Mikrofon cihazı seçimi ---- */
+function preferredMic() {
+  try { return localStorage.getItem('nexarc-mic') || null; } catch (e) { return null; }
+}
+function setPreferredMic(id) {
+  try { localStorage.setItem('nexarc-mic', id || ''); } catch (e) {}
+}
+async function populateDevices() {
+  const sel = $('#prof-device');
+  if (!sel) return;
+  try {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const mics = devs.filter((d) => d.kind === 'audioinput');
+    sel.innerHTML = '<option value="">Varsayılan</option>';
+    mics.forEach((m) => {
+      const o = document.createElement('option');
+      o.value = m.deviceId;
+      o.textContent = m.label || ('Mikrofon ' + (mics.indexOf(m) + 1));
+      sel.appendChild(o);
+    });
+    const cur = preferredMic();
+    if (cur) sel.value = cur;
+  } catch (e) {}
 }
 
 /* --- Emoji paleti --- */
@@ -683,14 +1042,49 @@ function renderVoiceGrid() {
   for (const u of members) {
     const isSelf = u.id === state.self?.id;
     const el = document.createElement('div');
-    el.className = 'voice-card' + (isSelf ? ' self' : '');
+    el.className = 'voice-card' + (isSelf ? ' self' : '') + (state.speaking.has(u.id) ? ' speaking' : '');
+    el.dataset.peer = u.id;
     const muteBadge = isSelf && !state.micOn
       ? `<span class="mute-badge">${ICON.micOff}</span>` : '';
+    const serverMuted = u.muted ? '<span class="muted-badge">Susturuldu</span>' : '';
+    let statusText = 'Ses kanalında';
+    if (isSelf) statusText = state.micOn ? 'Mikrofon açık' : 'Mikrofon kapalı';
+    if (u.sharing) statusText = '<span class="badge-share">Ekran Paylaşılıyor</span>';
+    if (u.camera) statusText += ' ' + (statusText.startsWith('<') ? '' : '') + '<span class="badge-share">📷</span>';
+    const vol = !isSelf
+      ? `<div class="vol-row"><span class="vol-icon">🔊</span><input type="range" min="0" max="200" value="100" data-vol-peer="${esc(u.id)}" /></div>`
+      : '';
     el.innerHTML = `
       <span class="avatar" style="background:${esc(u.color)}">${esc(avatarOf(u))}${muteBadge}</span>
-      <div class="vcard-name">${esc(u.name)}${isSelf ? ' <span style="color:var(--muted)">(sen)</span>' : ''}</div>
-      <div class="vcard-status">${u.sharing ? '<span class="badge-share">Ekran Paylaşılıyor</span>' : (isSelf ? (state.micOn ? 'Mikrofon açık' : 'Mikrofon kapalı') : 'Ses kanalında')}</div>`;
+      <div class="vcard-name">${esc(u.name)}${isSelf ? ' <span style="color:var(--muted)">(sen)</span>' : ''} ${serverMuted}</div>
+      <div class="vcard-status">${statusText}</div>
+      ${vol}`;
+    if (!isSelf) {
+      const sl = el.querySelector('input[data-vol-peer]');
+      if (sl) sl.oninput = () => {
+        const a = state.audioEls.get(u.id);
+        if (a) a.volume = sl.value / 100;
+      };
+    }
     grid.appendChild(el);
+  }
+  // Kamera kartları (uzaktan gelenler)
+  for (const [peerId, stream] of state.cams) {
+    const user = state.users.get(peerId);
+    const card = document.createElement('div');
+    card.className = 'cam-card';
+    card.dataset.cam = peerId;
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    video.muted = true;
+    video.srcObject = stream;
+    video.play().catch(() => {});
+    const name = document.createElement('div');
+    name.className = 'cam-name';
+    name.textContent = user?.name || 'Kamera';
+    card.append(video, name);
+    grid.appendChild(card);
   }
 }
 
@@ -829,9 +1223,13 @@ function flushCandidates(key, meta) {
 function createPC(peerId, sendType, tracks, recvType) {
   const pc = new RTCPeerConnection(ICE);
   const meta = { pc, makingOffer: false, ignoreOffer: false, polite: state.self.id < peerId };
+  // Alıcı PC'ler (ekran/kamera izleyen taraf) yalnızca answer üretir — collision'ı önler
+  const isReceiver = sendType === 'cam-recv' || sendType === 'screen-recv';
   if (tracks.length) {
     const stream = makeStream(tracks);
     tracks.forEach((t) => pc.addTrack(t, stream));
+  } else if (isReceiver) {
+    try { pc.addTransceiver('video', { direction: 'recvonly' }); } catch (e) {}
   }
 
   pc.onicecandidate = (e) => { if (e.candidate) sendSignal(peerId, sendType, { candidate: e.candidate }); };
@@ -850,6 +1248,10 @@ function createPC(peerId, sendType, tracks, recvType) {
       }
       el.srcObject = stream;
       el.play().catch(() => {});
+      attachAnalyser(peerId, stream);
+    } else if (sendType === 'cam-recv') {
+      state.cams.set(peerId, stream);
+      renderVoiceGrid();
     } else {
       state.screens.set(peerId, stream);
       renderScreenArea();
@@ -857,6 +1259,7 @@ function createPC(peerId, sendType, tracks, recvType) {
   };
 
   pc.onnegotiationneeded = async () => {
+    if (isReceiver) return; // alıcılar teklif atmaz, yalnızca cevap verir
     try {
       meta.makingOffer = true;
       await pc.setLocalDescription();
@@ -869,7 +1272,9 @@ function createPC(peerId, sendType, tracks, recvType) {
   };
 
   const map = sendType === 'voice' ? state.voicePCs
-    : (sendType === 'screen-send' ? state.screenSendPCs : state.screenRecvPCs);
+    : (sendType === 'screen-send' ? state.screenSendPCs
+      : (sendType === 'cam-send' ? state.camSendPCs
+        : (sendType === 'cam-recv' ? state.camRecvPCs : state.screenRecvPCs)));
   map.set(peerId, meta);
   // Bekleyen ICE adaylarını bu PC'ye aktar (tampon anahtarı = recvType)
   flushCandidates(recvType + ':' + peerId, meta);
@@ -901,6 +1306,27 @@ function getMetaForSignal(wireType, from) {
     }
     return meta;
   }
+  if (wireType === 'cam-send') {
+    // Karşı taraf kamera teklifi gönderiyor → benim kamera alıcı PC'm
+    let meta = state.camRecvPCs.get(from);
+    if (!meta) {
+      const user = state.users.get(from);
+      if (user && user.camera) {
+        connectCamReceiver(from);
+        meta = state.camRecvPCs.get(from);
+      }
+    }
+    return meta;
+  }
+  if (wireType === 'cam-recv') {
+    // Karşı tarafın kamera cevabı → benim gönderici PC'm
+    let meta = state.camSendPCs.get(from);
+    if (!meta && state.cameraStream) {
+      createPC(from, 'cam-send', state.cameraStream.getTracks(), 'cam-recv');
+      meta = state.camSendPCs.get(from);
+    }
+    return meta;
+  }
   // 'screen-recv' — karşı tarafın verdiği cevap → benim gönderici PC'm
   let meta = state.screenSendPCs.get(from);
   if (!meta && state.screenStream) {
@@ -913,7 +1339,9 @@ function getMetaForSignal(wireType, from) {
 async function handleSignal(from, wireType, data) {
   // PC yoksa ve sadece aday geldiyse → tamponla
   const pre = (wireType === 'voice' ? state.voicePCs
-    : (wireType === 'screen-send' ? state.screenRecvPCs : state.screenSendPCs)).get(from);
+    : (wireType === 'screen-send' ? state.screenRecvPCs
+      : (wireType === 'cam-send' ? state.camRecvPCs
+        : (wireType === 'cam-recv' ? state.camSendPCs : state.screenSendPCs)))).get(from);
   if (!pre && data.candidate) {
     bufferCandidate(wireType + ':' + from, data.candidate);
     return;
@@ -947,7 +1375,9 @@ async function handleSignal(from, wireType, data) {
     if (data.description.type === 'offer') {
       // Cevap türü: gelen türün karşılığı
       const answerType = wireType === 'voice' ? 'voice'
-        : (wireType === 'screen-send' ? 'screen-recv' : 'screen-send');
+        : (wireType === 'screen-send' ? 'screen-recv'
+          : (wireType === 'cam-send' ? 'cam-recv'
+            : (wireType === 'cam-recv' ? 'cam-send' : 'screen-send')));
       try {
         await pc.setLocalDescription();
         sendSignal(from, answerType, { description: pc.localDescription });
@@ -967,14 +1397,67 @@ function connectVoicePeer(user) {
       createPC(user.id, 'screen-send', state.screenStream.getTracks(), 'screen-recv');
     }
   }
+  // Ben kameramı açıksa gönder
+  if (state.cameraStream && !state.camSendPCs.has(user.id)) {
+    createPC(user.id, 'cam-send', state.cameraStream.getTracks(), 'cam-recv');
+  }
   // Karşı taraf paylaşıyorsa ekranını al
   if (user.sharing) connectScreenReceiver(user.id);
+  // Karşı taraf kamerası açıksa al
+  if (user.camera) connectCamReceiver(user.id);
   renderVoiceGrid();
 }
 
 function connectScreenReceiver(peerId) {
   if (state.screenRecvPCs.has(peerId)) return;
   createPC(peerId, 'screen-recv', [], 'screen-send');
+}
+
+/* --- Kamera --- */
+function connectCamReceiver(peerId) {
+  if (state.camRecvPCs.has(peerId)) return;
+  createPC(peerId, 'cam-recv', [], 'cam-send');
+}
+function closeCamPC(peerId) {
+  const send = state.camSendPCs.get(peerId);
+  if (send) { try { send.pc.close(); } catch (e) {} state.camSendPCs.delete(peerId); }
+  const recv = state.camRecvPCs.get(peerId);
+  if (recv) { try { recv.pc.close(); } catch (e) {} state.camRecvPCs.delete(peerId); }
+  state.cams.delete(peerId);
+}
+
+async function toggleCamera() {
+  if (state.cameraOn) { stopCamera(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    state.cameraStream = stream;
+    state.cameraOn = true;
+    socket.emit('cam-start');
+    for (const peerId of state.voicePCs.keys()) {
+      if (!state.camSendPCs.has(peerId)) createPC(peerId, 'cam-send', stream.getTracks(), 'cam-recv');
+    }
+    updateCamUI();
+    renderVoiceGrid();
+    toast('Kamera açıldı 📷');
+  } catch (e) {
+    toast('Kamera başlatılamadı (izne gerek var)');
+  }
+}
+function stopCamera() {
+  if (!state.cameraStream) return;
+  state.cameraStream.getTracks().forEach((t) => t.stop());
+  state.cameraStream = null;
+  state.cameraOn = false;
+  for (const id of [...state.camSendPCs.keys()]) closeCamPC(id);
+  socket.emit('cam-stop');
+  updateCamUI();
+  renderVoiceGrid();
+}
+function updateCamUI() {
+  const btn = $('#cam-btn');
+  if (!btn) return;
+  btn.innerHTML = `${ICON.cam}<span>${state.cameraOn ? 'Kamerayı Kapat' : 'Kamera'}</span>`;
+  btn.classList.toggle('active', state.cameraOn);
 }
 
 function closeScreenPC(peerId) {
@@ -991,11 +1474,15 @@ function removePeer(peerId) {
   const meta = state.voicePCs.get(peerId);
   if (meta) { try { meta.pc.close(); } catch (e) {} state.voicePCs.delete(peerId); }
   closeScreenPC(peerId);
+  closeCamPC(peerId);
   const el = state.audioEls.get(peerId);
   if (el) { el.srcObject = null; el.remove(); state.audioEls.delete(peerId); }
+  state.speaking.delete(peerId);
   state.pendingCands.delete('voice:' + peerId);
   state.pendingCands.delete('screen-send:' + peerId);
   state.pendingCands.delete('screen-recv:' + peerId);
+  state.pendingCands.delete('cam-send:' + peerId);
+  state.pendingCands.delete('cam-recv:' + peerId);
 }
 
 /* ============================================================
@@ -1013,6 +1500,7 @@ function localVoiceReset(toastMsg) {
   for (const id of [...state.voicePCs.keys()]) removePeer(id);
   if (state.localStream) { state.localStream.getTracks().forEach((t) => t.stop()); state.localStream = null; }
   if (state.screenStream) stopScreen();
+  if (state.cameraStream) stopCamera();
   state.voiceChannel = null;
   $('#voice-view').classList.add('hidden');
   if (toastMsg) toast(toastMsg);
@@ -1098,7 +1586,72 @@ function updateShareUI() {
 }
 
 $('#mic-btn').onclick = toggleMic;
+$('#cam-btn').onclick = toggleCamera;
 $('#share-btn').onclick = toggleScreen;
 $('#leave-btn').onclick = leaveVoice;
 // Ayrıl butonunu doldur (ikonsuz boş kalmasın)
 $('#leave-btn').innerHTML = `${ICON.leave}<span>Ses Kanalından Ayrıl</span>`;
+
+/* ---- Mesaj arama ---- */
+const searchBtn = $('#search-btn');
+const searchInput = $('#search-input');
+const searchPanel = $('#search-panel');
+if (searchBtn) {
+  searchBtn.onclick = () => {
+    const box = document.querySelector('.top-search');
+    box.classList.toggle('hidden');
+    if (!box.classList.contains('hidden')) searchInput.focus();
+    searchPanel.classList.add('hidden');
+  };
+  $('#search-close').onclick = () => {
+    document.querySelector('.top-search').classList.add('hidden');
+    searchPanel.classList.add('hidden');
+  };
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    if (!state.textChannel) return;
+    socket.emit('search', { channelId: state.textChannel, query: searchInput.value }, ({ results }) => {
+      searchPanel.innerHTML = '';
+      if (!results || !results.length) {
+        searchPanel.innerHTML = '<div class="sr-item">Sonuç bulunamadı</div>';
+      }
+      for (const m of results) {
+        const it = document.createElement('div');
+        it.className = 'sr-item';
+        it.innerHTML = `<div class="sr-name">${esc(m.user.name)} <span style="color:var(--muted);font-weight:400">${fmtTime(m.ts)}</span></div><div class="sr-text">${esc(String(m.text || '📎 medya').slice(0, 80))}</div>`;
+        it.onclick = () => {
+          searchPanel.classList.add('hidden');
+          const el = document.querySelector(`.msg[data-mid="${m.id}"]`);
+          if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('new-msg'); setTimeout(() => el.classList.remove('new-msg'), 2000); }
+        };
+        searchPanel.appendChild(it);
+      }
+      searchPanel.classList.remove('hidden');
+    });
+  });
+}
+
+/* ---- Sabitlenmiş mesajlar ---- */
+$('#pins-btn').onclick = () => {
+  if (!state.textChannel) return;
+  socket.emit('chat-join', state.textChannel); // pin-list tetiklenir
+  setTimeout(() => { $('#pin-modal').classList.remove('hidden'); }, 200);
+};
+$('#pin-close').onclick = () => $('#pin-modal').classList.add('hidden');
+$('#pin-modal').addEventListener('click', (e) => { if (e.target === $('#pin-modal')) $('#pin-modal').classList.add('hidden'); });
+socket.on('pin-list', ({ channelId, pins }) => {
+  if (channelId !== state.textChannel) return;
+  state.pins = pins || [];
+  const list = $('#pin-list');
+  list.innerHTML = '';
+  if (!state.pins.length) {
+    list.innerHTML = '<div class="pin-item" style="border:none">Sabitlenmiş mesaj yok</div>';
+    return;
+  }
+  for (const p of state.pins) {
+    const it = document.createElement('div');
+    it.className = 'pin-item';
+    it.innerHTML = `<b style="background:${esc(p.user.color)};color:#111;border-radius:6px;padding:1px 7px;font-size:11px">${esc(avatarOf(p.user))}</b><div><b>${esc(p.user.name)}</b> <span>${fmtTime(p.ts)}</span><br/>${esc(String(p.text || '📎 medya').slice(0, 100))}</div>`;
+    list.appendChild(it);
+  }
+});

@@ -25,7 +25,22 @@ Tema: Nexarc kimliği (siyah + `#ff725e`).
   grup başlıklarındaki + butonu; kanalın üzerine gelince ✕); silinen ses
   kanalındaki herkes otomatik çıkarılır
 - 🗑️ **Mesaj silme** — kendi mesajının üzerine gelince çöp kutusu butonu
-- 😊 **Emoji** — sohbet kutusundaki 😊 butonuyla emoji paleti (63 emoji)
+- 😊 **Emoji** — sohbet kutusundaki 😊 butonuyla emoji paleti (64 emoji, ツ dahil)
+- ✏️ **Mesaj düzenleme** — kendi mesajının üzerine gelince kalem ikonu
+- ❤️ **Emoji tepkileri** — her mesaja 👍 ❤️ 😂 gibi tepkiler, sayaçlı
+- ↩️ **Alıntı (yanıt)** — bir mesaja cevap ver, alıntı önizlemesi görünsün
+- ⌨️ **"Yazıyor..." göstergesi** — kanaldaki kişiler yazarken görünür
+- 🔍 **Mesaj arama** — üst bardaki büyüteçle kanal içinde ara
+- 📌 **Sabitlenmiş mesajlar** — önemli mesajları pinle, 📌 listesinde topla
+- 🎙️ **Konuşan vurgusu** — ses seviyesine göre turuncu halka (Discord gibi)
+- 📷 **Kamera** — ses kanalında kamera aç, diğerleri canlı görür
+- 🔇 **Susturma** — kanaldaki birini tek tıkla sustur (kullanıcı kartından)
+- 🎚️ **Ses seviyesi** — her kullanıcının sesini ayrı ayarla (kaydırıcı)
+- 🎤 **Mikrofon seçimi** — profil penceresinden mikrofon cihazını seç
+- 💌 **Özel mesaj (DM)** — üyeye tıklayıp "Mesaj Gönder" ile özel sohbet
+- 🟢 **Durumlar** — Çevrimiçi / Boşta / Rahatsız etmeyin (profilden)
+- 🃏 **Kullanıcı kartı** — üyeye tıklayınca profil, DM ve susturma
+- 🛡️ **Roller** — ilk kayıt olan kullanıcı Admin rozeti alır
 
 ## 🚀 Çalıştırma
 

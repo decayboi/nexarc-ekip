@@ -107,9 +107,18 @@
           <button id="mobile-menu-btn" title="Kanallar" aria-label="Kanalları aç">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
           </button>
+          <img class="top-logo" src="logo.png" alt="Nexarc" />
           <div id="channel-title">—</div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="top-search hidden">
+            <input id="search-input" placeholder="Mesajlarda ara..." maxlength="60" />
+            <button id="search-close" title="Kapat">✕</button>
+          </div>
+          <button id="search-btn" class="top-btn" title="Mesajlarda ara">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          </button>
+          <button id="pins-btn" class="top-btn" title="Sabitlenmiş mesajlar">📌</button>
           <div id="conn"><span id="conn-dot"></span><span id="conn-text">Bağlanıyor…</span></div>
           <button id="profile-btn" title="Profilini özelleştir">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -125,6 +134,7 @@
       <!-- Metin görünümü -->
       <section id="text-view" class="view hidden">
         <div id="messages"></div>
+        <div id="typing-ind"></div>
         <form id="chat-form" autocomplete="off">
           <button type="button" id="emoji-btn" title="Emoji ekle">😊</button>
           <button type="button" id="attach-btn" title="Dosya ekle (resim, video, ses, pdf...)">
@@ -143,6 +153,9 @@
         <div id="voice-grid"></div>
         <div id="voice-controls">
           <button id="mic-btn" class="ctl" title="Mikrofonu aç/kapat"></button>
+          <button id="cam-btn" class="ctl" title="Kamerayı aç/kapat">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7 16 12l7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg><span>Kamera</span>
+          </button>
           <button id="share-btn" class="ctl" title="Ekran paylaş"></button>
           <button id="leave-btn" class="ctl danger" title="Ses kanalından çık"></button>
         </div>
@@ -153,7 +166,7 @@
     <aside id="members-sidebar">
       <div class="group-label" id="members-title">ÜYELER — 0</div>
       <div id="members"></div>
-      <div class="ver-tag" title="Uygulama sürümü">Nexarc v2.8</div>
+      <div class="ver-tag" title="Uygulama sürümü">Nexarc v3.0</div>
     </aside>
   </div>
 
@@ -164,6 +177,18 @@
       <input id="prof-display" class="auth-input" maxlength="24" placeholder="Görünen ad" />
       <div class="colors" id="prof-color-picker"></div>
       <div class="avatar-pick" id="prof-avatar-pick"></div>
+      <div class="prof-row">
+        <label>Durum</label>
+        <select id="prof-status" class="auth-input">
+          <option value="online">🟢 Çevrimiçi</option>
+          <option value="idle">🟡 Boşta</option>
+          <option value="dnd">🔴 Rahatsız etmeyin</option>
+        </select>
+      </div>
+      <div class="prof-row">
+        <label>Mikrofon</label>
+        <select id="prof-device" class="auth-input"><option value="">Varsayılan</option></select>
+      </div>
       <div class="modal-btns">
         <button id="prof-save" class="primary-btn">Kaydet</button>
         <button id="prof-logout" class="secondary-btn hidden">Çıkış Yap</button>
@@ -172,6 +197,36 @@
       <p class="footnote" id="prof-note">Hesabınla giriş yaptıysan değişiklikler kalıcıdır.</p>
     </div>
   </div>
+
+  <!-- Kullanıcı kartı -->
+  <div id="user-modal" class="modal hidden">
+    <div class="modal-card user-card">
+      <span class="user-avatar" id="um-avatar">?</span>
+      <div class="user-name" id="um-name">—</div>
+      <div class="user-tag" id="um-tag"></div>
+      <div class="user-role" id="um-role"></div>
+      <div class="user-status" id="um-status"></div>
+      <div class="modal-btns">
+        <button id="um-dm" class="primary-btn">Mesaj Gönder</button>
+        <button id="um-mute" class="secondary-btn hidden">Sustur</button>
+        <button id="um-close" class="ghost-btn">Kapat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sabitlenmiş mesajlar -->
+  <div id="pin-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>📌 Sabitlenmiş Mesajlar</h3>
+      <div id="pin-list" class="pin-list"></div>
+      <div class="modal-btns">
+        <button id="pin-close" class="ghost-btn">Kapat</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="react-pop" class="hidden"></div>
+  <div id="search-panel" class="hidden"></div>
 
   <div id="menu-overlay" class="hidden"></div>
   <div id="screen-lightbox" class="hidden">

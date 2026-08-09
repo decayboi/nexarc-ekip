@@ -65,7 +65,7 @@ const URL = 'http://localhost:3000';
   if (!bOpen) { log('✗ B kayıt olamadı'); process.exit(1); }
   await wait(700);
   const membersB = await b.evaluate(() => [...document.querySelectorAll('.member-name')].map((el) => el.textContent.trim().replace(/\s*\(sen\)$/, '')));
-  if (!membersB.includes('Ali Tasarımcı')) { log('✗ B, A\'yı üye listesinde görmedi: ' + membersB.join(',')); process.exit(1); }
+  if (!membersB.some((x) => x.includes('Ali Tasarımcı'))) { log('✗ B, A\'yı üye listesinde görmedi: ' + membersB.join(',')); process.exit(1); }
   log('2. Üye listesi: B, A\'yı görüyor →', membersB.join(', '));
 
   // 3) A profili güncelliyor → B anında yeni adı görüyor
@@ -77,7 +77,7 @@ const URL = 'http://localhost:3000';
   });
   await wait(1000);
   const membersB2 = await b.evaluate(() => [...document.querySelectorAll('.member-name')].map((el) => el.textContent.trim().replace(/\s*\(sen\)$/, '')));
-  if (!membersB2.includes('Ali Yeni')) { log('✗ B, güncel adı görmedi: ' + membersB2.join(',')); process.exit(1); }
+  if (!membersB2.some((x) => x.includes('Ali Yeni'))) { log('✗ B, güncel adı görmedi: ' + membersB2.join(',')); process.exit(1); }
   log('3. Profil güncelleme: A → "Ali Yeni" 🌵, B anında gördü');
 
   // 4) Otomatik giriş: A sayfayı yenileyince hâlâ girişli

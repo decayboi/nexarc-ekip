@@ -116,7 +116,7 @@ const URL = 'http://localhost:3000';
   if (!seenB) { log('✗ B silinecek mesajı görmedi'); process.exit(1); }
   // A kendi mesajının çöp kutusuna basar
   await a.evaluate(() => {
-    const del = document.querySelector('.msg.own .msg-del');
+    const del = document.querySelector('.msg.own .ma-del');
     if (!del) throw new Error('silme butonu yok');
     del.click();
   });
@@ -133,18 +133,18 @@ const URL = 'http://localhost:3000';
   const emojiCount = await a.evaluate(() => document.querySelectorAll('#emoji-picker .emoji-item').length);
   if (!pickerVisible || emojiCount < 30) { log('✗ Emoji paleti açılmadı (' + emojiCount + ' emoji)'); process.exit(1); }
   await a.evaluate(() => {
-    document.querySelectorAll('#emoji-picker .emoji-item')[5].click(); // 😍
+    document.querySelectorAll('#emoji-picker .emoji-item')[5].click(); // 😊
   });
   await wait(300);
   const inputVal = await a.evaluate(() => document.querySelector('#chat-input').value);
-  if (!inputVal.includes('😍')) { log('✗ Emoji inputa eklenmedi: "' + inputVal + '"'); process.exit(1); }
+  if (!inputVal.includes('😊')) { log('✗ Emoji inputa eklenmedi: "' + inputVal + '"'); process.exit(1); }
   await a.evaluate(() => {
     document.querySelector('#chat-form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
   });
   await wait(800);
-  const emojiSeenB = await b.evaluate(() => [...document.querySelectorAll('.msg-text')].some((e) => e.textContent.includes('😍')));
+  const emojiSeenB = await b.evaluate(() => [...document.querySelectorAll('.msg-text')].some((e) => e.textContent.includes('😊')));
   if (!emojiSeenB) { log('✗ B emojili mesajı görmedi'); process.exit(1); }
-  log('6. Emoji: palet açıldı (' + emojiCount + ' emoji), 😍 eklendi ve gönderildi → B gördü');
+  log('6. Emoji: palet açıldı (' + emojiCount + ' emoji), 😊 eklendi ve gönderildi → B gördü');
 
   // 7) Temizlik: oluşturulan metin kanalını sil (dialog'u açıkça bekle)
   const dialogP = new Promise((res) => a.once('dialog', (d) => { d.accept(); res(true); }));
