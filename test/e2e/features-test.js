@@ -134,9 +134,11 @@ const URL = 'http://localhost:3000';
     document.querySelector('#chat-form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
   });
   await wait(900);
-  // A: DM kanalı listesinde var mı?
+  // A: DM görünümüne geçip kanalı aç
+  await a.evaluate(() => document.querySelector('#dm-nav-btn').click());
+  await wait(500);
   await a.evaluate(() => {
-    const dmCh = [...document.querySelectorAll('#text-channels .channel')].find((c) => c.querySelector('.ch-name').textContent.trim().startsWith('@'));
+    const dmCh = [...document.querySelectorAll('#dm-list .channel')].find((c) => c.querySelector('.ch-name').textContent.trim().startsWith('@'));
     if (dmCh) dmCh.click();
   });
   await wait(800);
@@ -195,6 +197,9 @@ const URL = 'http://localhost:3000';
   });
   if (!camSeen) { log('✗ B kamera videosu alamadı'); process.exit(1); }
   log('9. Kamera: A açtı, B gerçek video karesi aldı');
+  // Kamera kapat (profil kartı geri gelsin — sonraki adımlar için)
+  await a.evaluate(() => document.querySelector('#cam-btn').click());
+  await wait(800);
 
   // 10) Susturma: B, A'yı susturur → A'nın audio muted olur
   await b.evaluate(() => {

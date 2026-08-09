@@ -587,6 +587,102 @@ if (menuBtn) {
 if (menuOverlay) menuOverlay.onclick = closeMenu;
 
 /* ============================================================
+   DM GÖRÜNÜMÜ (Discord gibi ayrı bölüm)
+   ============================================================ */
+let dmMode = false;
+
+function setDmMode(on) {
+  dmMode = on;
+  const serverView = $('#server-channels-view');
+  const dmView = $('#dm-view');
+  const dmBtn = $('#dm-nav-btn');
+  if (serverView) serverView.classList.toggle('hidden', on);
+  if (dmView) dmView.classList.toggle('hidden', !on);
+  if (dmBtn) dmBtn.classList.toggle('active', on);
+  if (on) renderDmList();
+  else if (!state.textChannel) {
+    const t = state.channels.find((c) => c.type === 'text' && !c.dm);
+    if (t) selectTextChannel(t.id);
+  }
+}
+
+/* Arkadaş listesi: hesaplı diğer kullanıcılar + açılmış DM'ler */
+function renderDmList() {
+  const box = $('#dm-list');
+  if (!box) return;
+  box.innerHTML = '';
+  // Açık DM'ler
+  const dms = state.channels.filter((c) => c.dm);
+  if (dms.length) {
+    for (const ch of dms) {
+      const el = document.createElement('button');
+      el.className = 'channel dm' + (state.textChannel === ch.id ? ' active' : '');
+      el.innerHTML = `${ICON.dm}<span class="ch-name">${esc(ch.name)}</span>`;
+      el.onclick = () => { selectTextChannel(ch.id); setDmMode(true); };
+      box.appendChild(el);
+    }
+  }
+  // Hesabı olan çevrimiçi üyeler (kendin hariç) — tıkla DM başlat
+  const members = [...state.users.values()].filter((u) => u.username && u.id !== state.self?.id);
+  const existing = new Set(dms.map((c) => c.name.replace('@', '').toLowerCase()));
+  for (const u of members) {
+    if (existing.has((u.username || '').toLowerCase())) continue;
+    const el = document.createElement('button');
+    el.className = 'channel dm new-dm';
+    el.innerHTML = `${ICON.dm}<span class="ch-name">${esc(u.name)}</span>`;
+    el.onclick = () => startDmWith(u);
+    box.appendChild(el);
+  }
+  if (!dms.length && !members.length) {
+    box.innerHTML = '<div class="dm-empty">Henüz mesaj yok.<br/>Üye listesinden birine tıklayıp<br/>"Mesaj Gönder" de.</div>';
+  }
+}
+
+function startDmWith(u) {
+  socket.emit('dm-open', { username: u.username }, (res) => {
+    if (!res || !res.ok) { toast((res && res.error) || 'DM açılamadı'); return; }
+    const ch = { id: res.roomId, name: '@' + res.peer.name, type: 'text', dm: true };
+    if (!state.channels.find((c) => c.id === res.roomId)) state.channels.push(ch);
+    setDmMode(true);
+    renderDmList();
+    selectTextChannel(res.roomId);
+    setTitle(res.peer.name, '@');
+  });
+}
+
+const dmNavBtn = $('#dm-nav-btn');
+if (dmNavBtn) dmNavBtn.onclick = () => setDmMode(!dmMode);
+const dmSearchInput = $('#dm-search');
+if (dmSearchInput) {
+  dmSearchInput.addEventListener('input', () => {
+    const q = dmSearchInput.value.trim().toLowerCase();
+    document.querySelectorAll('#dm-list .channel').forEach((el) => {
+      const name = el.querySelector('.ch-name').textContent.toLowerCase();
+      el.style.display = (!q || name.includes(q)) ? '' : 'none';
+    });
+  });
+}
+/* Üye kartındaki "Mesaj Gönder" DM görünümünü de açar */
+const umDmBtn = $('#um-dm');
+if (umDmBtn) umDmBtn.addEventListener('click', () => {
+  const u = state.users.get(umUserId);
+  if (!u || !u.username) return;
+  socket.emit('dm-open', { username: u.username }, (res) => {
+    if (res && res.ok) {
+      closeUserCard();
+      const ch = { id: res.roomId, name: '@' + res.peer.name, type: 'text', dm: true };
+      if (!state.channels.find((c) => c.id === res.roomId)) state.channels.push(ch);
+      setDmMode(true);
+      renderDmList();
+      selectTextChannel(res.roomId);
+      setTitle(res.peer.name, '@');
+    } else {
+      toast((res && res.error) || 'DM açılamadı');
+    }
+  });
+});
+
+/* ============================================================
    KANAL ARAYÜZÜ
    ============================================================ */
 function renderChannels() {
@@ -594,19 +690,18 @@ function renderChannels() {
   const voices = $('#voice-channels');
   texts.innerHTML = '';
   voices.innerHTML = '';
+  // DM görünümü açıksa liste yenilenir
+  if (dmMode) renderDmList();
 
   for (const ch of state.channels) {
+    if (ch.dm) continue; // DM'ler artık ayrı DM görünümünde
     const del = `<button class="channel-del" title="'${esc(ch.name)}' kanalını sil">✕</button>`;
     if (ch.type === 'text') {
-      const isDm = !!ch.dm;
       const el = document.createElement('button');
-      el.className = 'channel' + (isDm ? ' dm' : '') + (state.textChannel === ch.id ? ' active' : '');
-      el.innerHTML = `${isDm ? ICON.dm : ICON.hash}<span class="ch-name">${esc(ch.name)}</span>`;
+      el.className = 'channel' + (state.textChannel === ch.id ? ' active' : '');
+      el.innerHTML = `${ICON.hash}<span class="ch-name">${esc(ch.name)}</span>${del}`;
       el.onclick = () => selectTextChannel(ch.id);
-      if (!isDm) {
-        el.innerHTML = `${ICON.hash}<span class="ch-name">${esc(ch.name)}</span>${del}`;
-        el.querySelector('.channel-del').onclick = (e) => { e.stopPropagation(); confirmDeleteChannel(ch); };
-      }
+      el.querySelector('.channel-del').onclick = (e) => { e.stopPropagation(); confirmDeleteChannel(ch); };
       texts.appendChild(el);
     } else {
       const el = document.createElement('button');
@@ -761,22 +856,7 @@ function openUserCard(userId) {
 function closeUserCard() { $('#user-modal').classList.add('hidden'); umUserId = null; }
 $('#um-close').onclick = closeUserCard;
 $('#user-modal').addEventListener('click', (e) => { if (e.target === $('#user-modal')) closeUserCard(); });
-$('#um-dm').onclick = () => {
-  const u = state.users.get(umUserId);
-  if (!u || !u.username) return;
-  socket.emit('dm-open', { username: u.username }, (res) => {
-    if (res && res.ok) {
-      closeUserCard();
-      const ch = { id: res.roomId, name: '@' + res.peer.name, type: 'text', dm: true };
-      if (!state.channels.find((c) => c.id === res.roomId)) state.channels.push(ch);
-      renderChannels();
-      selectTextChannel(res.roomId);
-      setTitle(res.peer.name, '@');
-    } else {
-      toast((res && res.error) || 'DM açılamadı');
-    }
-  });
-};
+/* #um-dm burada bağlanmaz — DM görünümü bölümündeki listener kullanılır (startDmWith) */
 $('#um-mute').onclick = () => {
   const u = state.users.get(umUserId);
   if (!u) return;
@@ -1154,8 +1234,8 @@ function renderVoiceGrid() {
   const members = [...state.users.values()].filter((u) => u.voiceChannel === state.voiceChannel);
   for (const u of members) {
     const isSelf = u.id === state.self?.id;
-    // Kamera açıkken kendi profil kartını gizle — sadece kamera görünsün
-    if (isSelf && state.cameraOn) continue;
+    // Kamera açık olan kullanıcının profil kartı HERKES için gizlenir — kamera kartı yerini alır
+    if (u.camera) continue;
     const el = document.createElement('div');
     el.className = 'voice-card' + (isSelf ? ' self' : '') + (state.speaking.has(u.id) ? ' speaking' : '');
     el.dataset.peer = u.id;
@@ -1180,38 +1260,49 @@ function renderVoiceGrid() {
     }
     grid.appendChild(el);
   }
-  // Kamera kartları (kendi kameran + uzaktan gelenler)
-  if (state.cameraOn && state.cameraStream) {
-    const card = document.createElement('div');
-    card.className = 'cam-card self-cam';
-    const video = document.createElement('video');
-    video.autoplay = true;
-    video.playsInline = true;
-    video.muted = true;
-    video.srcObject = state.cameraStream;
-    video.play().catch(() => {});
-    const name = document.createElement('div');
-    name.className = 'cam-name';
-    name.textContent = 'Sen 📷';
-    card.append(video, name);
-    grid.appendChild(card);
-  }
+  renderCamGallery();
+}
+
+/* Kamera galerisi — küçük önizleme kartları (kendi kameran + diğerleri) */
+function renderCamGallery() {
+  const gallery = $('#cam-gallery');
+  if (!gallery) return;
+  const entries = [];
+  if (state.cameraOn && state.cameraStream) entries.push({ peerId: 'self', stream: state.cameraStream, label: 'Sen' });
   for (const [peerId, stream] of state.cams) {
     const user = state.users.get(peerId);
-    const card = document.createElement('div');
-    card.className = 'cam-card';
-    card.dataset.cam = peerId;
-    const video = document.createElement('video');
-    video.autoplay = true;
-    video.playsInline = true;
-    video.muted = true;
-    video.srcObject = stream;
+    entries.push({ peerId, stream, label: user?.name || 'Kamera' });
+  }
+  if (!entries.length) {
+    gallery.classList.add('hidden');
+    gallery.innerHTML = '';
+    return;
+  }
+  gallery.classList.remove('hidden');
+  // Mevcut kartları güncelle / yenileri ekle
+  for (const { peerId, stream, label } of entries) {
+    let card = gallery.querySelector(`.cam-card[data-peer="${peerId}"]`);
+    if (!card) {
+      card = document.createElement('div');
+      card.className = 'cam-card' + (peerId === 'self' ? ' self-cam' : '');
+      card.dataset.peer = peerId;
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = true;
+      const name = document.createElement('div');
+      name.className = 'cam-name';
+      card.append(video, name);
+      gallery.appendChild(card);
+    }
+    const video = card.querySelector('video');
+    if (video.srcObject !== stream) video.srcObject = stream;
     video.play().catch(() => {});
-    const name = document.createElement('div');
-    name.className = 'cam-name';
-    name.textContent = user?.name || 'Kamera';
-    card.append(video, name);
-    grid.appendChild(card);
+    card.querySelector('.cam-name').textContent = label;
+  }
+  // Kaldırılan kartları temizle
+  for (const card of gallery.querySelectorAll('.cam-card')) {
+    if (!entries.some((e) => e.peerId === card.dataset.peer)) card.remove();
   }
 }
 

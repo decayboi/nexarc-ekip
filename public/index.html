@@ -71,11 +71,16 @@
       <div class="server-btn" title="Nexarc">
         <img class="server-logo" src="logo.png" alt="Nexarc" />
       </div>
+      <div class="sidebar-divider"></div>
+      <button class="dm-nav-btn" id="dm-nav-btn" title="Doğrudan Mesajlar">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2C6.48 2 2 6.02 2 10.97c0 2.88 1.53 5.43 3.92 7.1L5 22l4.26-2.19c.86.2 1.78.31 2.74.31 5.52 0 10-4.02 10-9.15S17.52 2 12 2zm-4.3 9.1a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6zm4.3 0a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6zm4.3 0a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6z"/></svg>
+      </button>
+      <div class="sidebar-divider"></div>
     </aside>
 
     <!-- Sol: kanal listesi (geniş panel) -->
     <aside id="channels-sidebar">
-      <div class="sidebar-scroll">
+      <div class="sidebar-scroll" id="server-channels-view">
         <div class="channel-group">
           <div class="group-label-row">
             <div class="group-label">METİN KANALLARI</div>
@@ -97,6 +102,14 @@
             <button id="inline-add-cancel" class="mini-btn ghost">İptal</button>
           </div>
         </div>
+      </div>
+      <!-- DM görünümü (Discord gibi ayrı) -->
+      <div class="sidebar-scroll hidden" id="dm-view">
+        <div class="dm-head">
+          <div class="group-label">ARKADAŞLAR</div>
+          <input id="dm-search" class="dm-search" placeholder="Ara..." maxlength="30" />
+        </div>
+        <div id="dm-list"></div>
       </div>
     </aside>
 
@@ -152,6 +165,7 @@
       <!-- Ses görünümü -->
       <section id="voice-view" class="view hidden">
         <div id="screen-area" class="hidden"></div>
+        <div id="cam-gallery" class="cam-gallery hidden"></div>
         <div id="voice-grid"></div>
         <div id="voice-controls">
           <button id="mic-btn" class="ctl" title="Mikrofonu aç/kapat"></button>
@@ -168,7 +182,7 @@
     <aside id="members-sidebar">
       <div class="group-label" id="members-title">ÜYELER — 0</div>
       <div id="members"></div>
-      <div class="ver-tag" title="Uygulama sürümü">Nexarc v3.3</div>
+      <div class="ver-tag" title="Uygulama sürümü">Nexarc v3.5</div>
     </aside>
   </div>
 

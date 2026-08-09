@@ -491,14 +491,22 @@ body[data-theme="acik"] .top-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.12)
 }
 
 /* --- Kamera kartları --- */
+.cam-gallery {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  padding: 4px 0 10px;
+}
 .cam-card {
   position: relative; border-radius: 12px; overflow: hidden;
   border: 1px solid var(--line); background: #000;
+  width: 160px; height: 110px; flex-shrink: 0;
 }
-.cam-card video { width: 100%; max-height: 220px; display: block; background: #000; }
+.cam-card video {
+  width: 100%; height: 100%; object-fit: cover; display: block; background: #000;
+}
 .cam-card .cam-name {
   position: absolute; bottom: 6px; left: 8px; font-size: 11px; font-weight: 600;
   background: rgba(0,0,0,.6); padding: 3px 8px; border-radius: 999px; color: #fff;
+  max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* --- Ses kartı: konuşan halkası + ses seviyesi --- */
@@ -829,3 +837,30 @@ body[data-theme="acik"] .top-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.12)
 
 /* Kullanıcı kartı durum mesajı */
 .user-status-text { font-size: 13px; color: var(--muted); margin-bottom: 14px; font-style: italic; }
+
+/* --- DM navigasyon butonu (sol şerit) --- */
+.sidebar-divider { width: 32px; height: 1px; background: var(--line); margin: 10px auto; }
+.dm-nav-btn {
+  width: 48px; height: 48px; border: none; border-radius: 50%;
+  background: var(--bg2); color: var(--muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line);
+  transition: background .15s, color .15s, border-radius .15s;
+}
+.dm-nav-btn:hover { background: var(--accent); color: #000; border-radius: 16px; }
+.dm-nav-btn.active { background: var(--accent); color: #000; border-radius: 16px; }
+
+/* --- DM görünümü --- */
+#dm-view { padding: 0 8px; }
+.dm-head { padding: 10px 10px 6px; }
+.dm-search {
+  width: 100%; margin-top: 6px; padding: 8px 10px;
+  background: var(--bg3); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); font-size: 12.5px; font-family: inherit; outline: none;
+}
+.dm-search:focus { border-color: var(--accent); }
+#dm-list { padding: 4px 0; }
+.channel.dm .ch-name { color: var(--accent); font-weight: 600; }
+.channel.dm svg { color: var(--accent); }
+.channel.new-dm { opacity: 0.8; }
+.dm-empty { color: var(--muted); font-size: 12.5px; line-height: 1.6; text-align: center; padding: 20px 8px; }

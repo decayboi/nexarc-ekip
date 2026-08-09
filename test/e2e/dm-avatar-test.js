@@ -45,8 +45,8 @@ const URL = 'http://localhost:3000';
   await wait(400);
   await b.evaluate(() => document.querySelector('#um-dm').click());
   await wait(1000);
-  const cChannels = await c.evaluate(() => [...document.querySelectorAll('#text-channels .ch-name')].map((e) => e.textContent.trim()));
-  const bChannels = await b.evaluate(() => [...document.querySelectorAll('#text-channels .ch-name')].map((e) => e.textContent.trim()));
+  const cChannels = await c.evaluate(() => [...document.querySelectorAll('#text-channels .ch-name')].map((e) => e.textContent.trim()).concat([...document.querySelectorAll('#dm-list .ch-name')].map((e) => e.textContent.trim())));
+  const bChannels = await b.evaluate(() => [...document.querySelectorAll('#text-channels .ch-name')].map((e) => e.textContent.trim()).concat([...document.querySelectorAll('#dm-list .ch-name')].map((e) => e.textContent.trim())));
   log('1. C kanalları:', JSON.stringify(cChannels));
   log('   B kanalları:', JSON.stringify(bChannels));
   const dmInC = cChannels.some((x) => x.startsWith('@'));
@@ -54,7 +54,7 @@ const URL = 'http://localhost:3000';
   const dmInB = bChannels.some((x) => x.startsWith('@'));
   if (!dmInB) { log('✗ B DM kanalını görmüyor'); process.exit(1); }
   const dmStyled = await b.evaluate(() => {
-    const el = [...document.querySelectorAll('#text-channels .channel')].find((x) => x.querySelector('.ch-name').textContent.trim().startsWith('@'));
+    const el = [...document.querySelectorAll('#dm-list .channel')].find((x) => x.querySelector('.ch-name').textContent.trim().startsWith('@'));
     return el ? el.classList.contains('dm') : false;
   });
   if (!dmStyled) { log('✗ DM kanalı özel stil değil'); process.exit(1); }
@@ -67,11 +67,15 @@ const URL = 'http://localhost:3000';
     document.querySelector('#chat-form').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
   }, uniq);
   await wait(900);
-  const aSees = await a.evaluate((u) => {
-    const dmCh = [...document.querySelectorAll('#text-channels .channel')].find((x) => x.querySelector('.ch-name').textContent.trim().startsWith('@'));
-    if (dmCh) dmCh.click();
+  const aSees = await a.evaluate(() => {
+    document.querySelector('#dm-nav-btn').click();
     return true;
-  }, uniq);
+  });
+  await wait(500);
+  await a.evaluate(() => {
+    const dmCh = [...document.querySelectorAll('#dm-list .channel')].find((x) => x.querySelector('.ch-name').textContent.trim().startsWith('@'));
+    if (dmCh) dmCh.click();
+  });
   await wait(800);
   const aHas = await a.evaluate((u) => [...document.querySelectorAll('.msg-text')].some((e) => e.textContent.includes('Özel konuşma ' + u)), uniq);
   await wait(500);

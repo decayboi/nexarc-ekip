@@ -101,7 +101,10 @@ function getChannelsFor(user) {
   const list = CHANNELS.slice();
   for (const [roomId, dm] of dmRooms) {
     if (user.username && (dm.a === user.username || dm.b === user.username)) {
-      list.push({ id: roomId, name: '@' + (dm.a === user.username ? dm.b : dm.a), type: 'text', dm: true });
+      // Görünen ad (displayName) kullan — Discord arkadaş listesi gibi
+      const other = dm.a === user.username ? dm.b : dm.a;
+      const otherAcc = accounts[other];
+      list.push({ id: roomId, name: '@' + (otherAcc ? otherAcc.displayName : other), type: 'text', dm: true });
     }
   }
   return list;

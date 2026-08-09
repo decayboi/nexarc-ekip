@@ -70,7 +70,9 @@ const URL = 'http://localhost:3000';
   if (!sendInfo.hasSvg || sendInfo.text !== '' || sendInfo.w > 45 || sendInfo.h > 45) { log('✗ Gönder butonu yanlış'); process.exit(1); }
   log('   ✓ Gönder butonu küçük (40x40) ve kağıt uçak ikonlu');
 
-  // 3) Ses seviyesi: ikon var, basınca pop-up açılır, kaydırıcı çalışır
+  // 3) Ses seviyesi: önce A'nın kamerasını kapat (kartı geri gelsin), sonra ikon testi
+  await a.evaluate(() => document.querySelector('#cam-btn').click());
+  await wait(1000);
   const volBtnExists = await b.evaluate(() => !!document.querySelector('.vol-btn'));
   if (!volBtnExists) { log('✗ Ses ikonu yok'); process.exit(1); }
   // B, A'nın kartındaki 🔊 ikonuna basar
