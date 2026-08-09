@@ -411,35 +411,45 @@ let lbZoom = 1;
 
 function openScreenLightbox(peerId, isSelf) {
   const stream = isSelf ? state.screenStream : state.screens.get(peerId);
-  if (!stream) return;
+  const lb = $('#screen-lightbox');
+  if (!stream) { toast('Ekran akışı bulunamadı — paylaşım hâlâ kuruluyor'); return; }
+  if (!lb) { toast('Görüntüleyici eksik — sayfayı yenile (Ctrl+F5)'); return; }
+  const video = $('#lightbox-video');
+  if (!video) { toast('Video alanı eksik — sayfayı yenile (Ctrl+F5)'); return; }
   lbPeer = peerId;
   const user = isSelf ? null : state.users.get(peerId);
-  document.querySelector('.lightbox-title').textContent = isSelf
-    ? 'Senin ekranın'
-    : `${user?.name || 'Biri'} ekranı`;
-  $('#screen-lightbox').classList.remove('hidden');
+  const title = document.querySelector('.lightbox-title');
+  if (title) title.textContent = isSelf ? 'Senin ekranın' : `${user?.name || 'Biri'} ekranı`;
+  video.srcObject = stream;
+  lb.classList.remove('hidden');
   setLightboxZoom(1);
-  try { $('#lightbox-video').play(); } catch (e) {}
+  video.play().catch(() => {});
 }
 
 function closeScreenLightbox() {
-  if ($('#screen-lightbox').classList.contains('hidden')) return;
-  $('#screen-lightbox').classList.add('hidden');
-  $('#lightbox-video').srcObject = null;
+  const lb = $('#screen-lightbox');
+  if (!lb || lb.classList.contains('hidden')) return;
+  lb.classList.add('hidden');
+  const video = $('#lightbox-video');
+  if (video) video.srcObject = null;
   lbPeer = null;
 }
 
 function setLightboxZoom(z) {
   lbZoom = Math.min(4, Math.max(1, z));
-  $('#lightbox-video').style.transform = `scale(${lbZoom})`;
-  document.querySelector('#lb-zoom-reset').textContent = Math.round(lbZoom * 100) + '%';
+  const video = $('#lightbox-video');
+  if (video) video.style.transform = `scale(${lbZoom})`;
+  const btn = document.querySelector('#lb-zoom-reset');
+  if (btn) btn.textContent = Math.round(lbZoom * 100) + '%';
 }
 
-$('#lb-zoom-in').onclick = () => setLightboxZoom(lbZoom + 0.25);
-$('#lb-zoom-out').onclick = () => setLightboxZoom(lbZoom - 0.25);
-$('#lb-zoom-reset').onclick = () => setLightboxZoom(1);
-$('#lb-close').onclick = closeScreenLightbox;
-$('#screen-lightbox').addEventListener('click', (e) => { if (e.target === $('#screen-lightbox')) closeScreenLightbox(); });
+const lbIn = $('#lb-zoom-in'), lbOut = $('#lb-zoom-out'), lbReset = $('#lb-zoom-reset'), lbClose = $('#lb-close');
+if (lbIn) lbIn.onclick = () => setLightboxZoom(lbZoom + 0.25);
+if (lbOut) lbOut.onclick = () => setLightboxZoom(lbZoom - 0.25);
+if (lbReset) lbReset.onclick = () => setLightboxZoom(1);
+if (lbClose) lbClose.onclick = closeScreenLightbox;
+const lbBox = $('#screen-lightbox');
+if (lbBox) lbBox.addEventListener('click', (e) => { if (e.target === lbBox) closeScreenLightbox(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeScreenLightbox(); });
 
 /* ============================================================
@@ -485,7 +495,8 @@ function createPC(peerId, sendType, tracks, recvType) {
   pc.onicecandidate = (e) => { if (e.candidate) sendSignal(peerId, sendType, { candidate: e.candidate }); };
 
   pc.ontrack = (e) => {
-    const stream = e.streams[0];
+    // Bazı tarayıcılarda e.streams boş olabilir → track'ten akış kur (güvenli yol)
+    const stream = (e.streams && e.streams[0]) ? e.streams[0] : new MediaStream([e.track]);
     if (sendType === 'voice') {
       let el = state.audioEls.get(peerId);
       if (!el) {
@@ -734,3 +745,4 @@ function updateShareUI() {
 $('#mic-btn').onclick = toggleMic;
 $('#share-btn').onclick = toggleScreen;
 $('#leave-btn').onclick = leaveVoice;
+ice;

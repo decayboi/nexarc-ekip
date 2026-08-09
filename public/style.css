@@ -253,9 +253,8 @@ body {
 .live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: pulse 1.4s infinite; flex-shrink: 0; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-/* Büyüt butonu (kartın üzerine gelince görünür) */
-.screen-actions { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; gap: 6px; opacity: 0; transition: opacity .15s; }
-.screen-card:hover .screen-actions { opacity: 1; }
+/* Büyüt butonu (her zaman görünür) */
+.screen-actions { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; gap: 6px; }
 .screen-btn {
   width: 32px; height: 32px; border: none; border-radius: 8px;
   background: rgba(0, 0, 0, 0.65); color: #fff; cursor: pointer;
@@ -368,3 +367,10 @@ body {
   .ctl span { display: none; }
   .ctl { padding: 12px 16px; }
 }
+
+/* Sürüm etiketi */
+.ver-tag {
+  position: absolute; bottom: 10px; left: 12px;
+  font-size: 10px; color: var(--muted); letter-spacing: 1px; user-select: none;
+}
+#members-sidebar { position: relative; }

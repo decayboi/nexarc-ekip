@@ -164,7 +164,7 @@ async function main() {
     if (!areaVisible) throw new Error('ekran alanı görünür değil');
     ok('Ekran: B\'de video alanı görünüyor');
 
-    /* 6b. Paylaşan (A) kendi ekranını görüyor */
+    /* 6b. Paylaşan (A) kendi ekranını görüyor + video gerçekten kare çiziyor */
     const selfCard = await pages[0].evaluate(() => {
       const card = document.querySelector('.screen-card[data-peer="self"]');
       if (!card) return false;
@@ -173,7 +173,14 @@ async function main() {
     if (!selfCard) throw new Error('paylaşan kendi ekranını görmüyor');
     ok('Ekran: A kendi ekranını da görüyor ("Sen ekranını paylaşıyorsun")');
 
-    /* 6c. İzleyen (B) ekranı büyütebiliyor (lightbox + zoom) */
+    /* 6c. İzleyen (B) ekranı büyütebiliyor (lightbox + zoom) — video kareleri de kontrol */
+    const cardRenders = await pages[1].evaluate(() => {
+      const v = document.querySelector('.screen-card video');
+      return v ? (v.videoWidth > 0) : false;
+    });
+    if (!cardRenders) throw new Error('kart videosu kare çizmiyor (videoWidth=0)');
+    ok('Ekran: B\'nin kart videosu gerçekten kare çiziyor (' + (await pages[1].evaluate(() => document.querySelector('.screen-card video').videoWidth)) + '×' + (await pages[1].evaluate(() => document.querySelector('.screen-card video').videoHeight)) + ')');
+
     const lbOpened = await pages[1].evaluate(() => {
       const btn = document.querySelector('.screen-card .screen-btn');
       if (!btn) return false;
@@ -184,6 +191,19 @@ async function main() {
     await wait(400);
     const lbVisible = await pages[1].evaluate(() => !document.querySelector('#screen-lightbox').classList.contains('hidden'));
     if (!lbVisible) throw new Error('lightbox açılmadı');
+    // Lightbox videosu da GERÇEKTEN kare çiziyor mu?
+    const lbRenders = await waitFor(pages[1], 'lightbox video karesi', (st) => true, 8000)
+      .then(() => pages[1].evaluate(() => {
+        const v = document.querySelector('#lightbox-video');
+        return v && v.videoWidth > 0;
+      }))
+      .catch(() => false);
+    if (!lbRenders) throw new Error('lightbox videosu kare çizmiyor (videoWidth=0)');
+    const lbDims = await pages[1].evaluate(() => {
+      const v = document.querySelector('#lightbox-video');
+      return v.videoWidth + '×' + v.videoHeight;
+    });
+    ok('Ekran: B büyüttü → lightbox videosu kare çiziyor (' + lbDims + ')');
     await domClick(pages[1], '#lb-zoom-in');
     await wait(200);
     const zoomLevel = await pages[1].evaluate(() => document.querySelector('#lightbox-video').style.transform);
@@ -192,7 +212,7 @@ async function main() {
     await wait(300);
     const lbClosed = await pages[1].evaluate(() => document.querySelector('#screen-lightbox').classList.contains('hidden'));
     if (!lbClosed) throw new Error('lightbox kapanmadı');
-    ok('Ekran: B büyütebildi (lightbox + zoom %125), kapattı');
+    ok('Ekran: zoom %125 + kapatma çalıştı');
 
     /* 6d. B de paylaşınca iki ekran yan yana görünür (çoklu paylaşım) */
     await domClick(pages[1], '#share-btn');
