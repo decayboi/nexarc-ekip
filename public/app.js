@@ -652,6 +652,9 @@ function startDmWith(u) {
 
 const dmNavBtn = $('#dm-nav-btn');
 if (dmNavBtn) dmNavBtn.onclick = () => setDmMode(!dmMode);
+/* Sitedeki logoya tıklayınca DM görünümünden sunucu kanallarına dön (Discord gibi) */
+const serverLogoBtn = document.querySelector('.server-btn');
+if (serverLogoBtn) serverLogoBtn.onclick = () => setDmMode(false);
 const dmSearchInput = $('#dm-search');
 if (dmSearchInput) {
   dmSearchInput.addEventListener('input', () => {
@@ -774,10 +777,25 @@ function renderMembers() {
         <div class="member-status">${esc(status)}${u.statusText ? ' · ' + esc(u.statusText) : ''}</div>
       </div>
       ${u.sharing ? `<span class="member-icon" title="Ekran paylaşıyor">${ICON.share}</span>` : ''}`;
-    el.onclick = () => openUserCard(u.id);
+    el.onclick = () => openUserCard(u.id, el);
+    // Discord tarzı: üzerine gelince küçük panel açılır, ayrılınca kapanır
+    el.addEventListener('mouseenter', () => openUserCard(u.id, el, true));
+    el.addEventListener('mouseleave', () => scheduleCloseUserCard());
     box.appendChild(el);
   }
 }
+
+/* --- Küçük kullanıcı kartı (hover) --- */
+let umCloseTimer = null;
+function scheduleCloseUserCard(delay = 350) {
+  clearTimeout(umCloseTimer);
+  umCloseTimer = setTimeout(() => {
+    const card = $('#user-modal');
+    if (card && !card.classList.contains('hidden')) card.classList.add('hidden');
+    umUserId = null;
+  }, delay);
+}
+function cancelCloseUserCard() { clearTimeout(umCloseTimer); }
 
 /* ---- Ses seviyesi pop-up'ı ---- */
 let volPeer = null;
@@ -825,11 +843,12 @@ document.addEventListener('click', (e) => {
   if (!pop.contains(e.target) && !e.target.closest('.vol-btn')) closeVolPop();
 });
 
-/* ---- Kullanıcı kartı ---- */
+/* ---- Kullanıcı kartı (küçük panel — Discord tarzı) ---- */
 let umUserId = null;
-function openUserCard(userId) {
+function openUserCard(userId, anchorEl) {
   const u = state.users.get(userId);
   if (!u) return;
+  cancelCloseUserCard();
   umUserId = userId;
   $('#um-avatar').innerHTML = avatarHtml(u);
   $('#um-avatar').style.background = u.color;
@@ -851,11 +870,30 @@ function openUserCard(userId) {
   const dmBtn = $('#um-dm');
   dmBtn.textContent = u.username ? 'Mesaj Gönder' : 'DM yok (hesap gerekli)';
   dmBtn.disabled = !u.username;
-  $('#user-modal').classList.remove('hidden');
+  // Kartı üyenin yanına konumlandır (Discord hover paneli gibi)
+  const card = $('#user-modal');
+  if (anchorEl) {
+    const r = anchorEl.getBoundingClientRect();
+    const cw = 290;
+    let left = r.right + 12;
+    if (left + cw > window.innerWidth - 8) left = r.left - cw - 12;
+    card.style.left = Math.max(8, left) + 'px';
+    card.style.top = Math.max(8, Math.min(r.top, window.innerHeight - 320)) + 'px';
+  }
+  card.classList.remove('hidden');
 }
-function closeUserCard() { $('#user-modal').classList.add('hidden'); umUserId = null; }
+function closeUserCard() {
+  clearTimeout(umCloseTimer);
+  $('#user-modal').classList.add('hidden');
+  umUserId = null;
+}
 $('#um-close').onclick = closeUserCard;
-$('#user-modal').addEventListener('click', (e) => { if (e.target === $('#user-modal')) closeUserCard(); });
+/* Kartın üzerine gelince kapanmayı iptal et, ayrılınca gecikmeli kapat */
+const umCardEl = $('#user-modal');
+if (umCardEl) {
+  umCardEl.addEventListener('mouseenter', cancelCloseUserCard);
+  umCardEl.addEventListener('mouseleave', () => scheduleCloseUserCard(250));
+}
 /* #um-dm burada bağlanmaz — DM görünümü bölümündeki listener kullanılır (startDmWith) */
 $('#um-mute').onclick = () => {
   const u = state.users.get(umUserId);
@@ -1666,7 +1704,13 @@ function stopCamera() {
   state.cameraStream.getTracks().forEach((t) => t.stop());
   state.cameraStream = null;
   state.cameraOn = false;
-  for (const id of [...state.camSendPCs.keys()]) closeCamPC(id);
+  // SADECE kendi gönderdiğimiz kamera PC'lerini kapat — başkalarından
+  // alınan kamera akışlarına (state.cams) dokunma!
+  for (const id of [...state.camSendPCs.keys()]) {
+    const m = state.camSendPCs.get(id);
+    if (m) { try { m.pc.close(); } catch (e) {} }
+    state.camSendPCs.delete(id);
+  }
   socket.emit('cam-stop');
   updateCamUI();
   renderVoiceGrid();

@@ -190,6 +190,14 @@ body[data-theme="acik"] .top-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.12)
   display: flex; align-items: center; justify-content: center; padding: 16px;
 }
 .modal.hidden { display: none; }
+/* Kullanıcı kartı: tam ekran DEĞİL, üyenin yanında küçük yüzen panel (Discord gibi) */
+#user-modal.modal {
+  inset: auto; z-index: 260; background: transparent;
+  display: block; padding: 0; width: 290px;
+  animation: um-in .14s ease;
+}
+@keyframes um-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+#user-modal .modal-card { width: 100%; padding: 20px 18px 16px; }
 .modal-card {
   width: min(400px, 94vw); background: var(--bg2); border: 1px solid var(--line);
   border-radius: 16px; padding: 26px 26px 20px; text-align: center;
@@ -498,7 +506,7 @@ body[data-theme="acik"] .top-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.12)
 .cam-card {
   position: relative; border-radius: 12px; overflow: hidden;
   border: 1px solid var(--line); background: #000;
-  width: 160px; height: 110px; flex-shrink: 0;
+  width: 200px; height: 130px; flex-shrink: 0;
 }
 .cam-card video {
   width: 100%; height: 100%; object-fit: cover; display: block; background: #000;
