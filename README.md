@@ -11,11 +11,21 @@ Tema: Nexarc kimliği (siyah + `#ff725e`).
   da görür**, izleyenler **büyütüp yakınlaştırabilir** (lightbox + zoom),
   aynı anda **birden fazla kişi** paylaşabilir (kartlar yan yana)
 - 💬 **Metin kanalları** — genel, tasarım akışı, duyurular (+ son 100 mesaj geçmişi)
+- 📎 **Medya ekleme** — chat'e resim, video, ses ve dosya yükle (25 MB'a kadar);
+  resimler satır içi, videolar/sesler oynatıcılı, diğerleri indirme çipi olarak görünür
 - 👥 **Üye listesi** — kim hangi kanalda, kim ekran paylaşıyor
 - 🎨 Kişisel renk seçimi, takma ad, mikrofona dokunmadan katılma (dinleme modu)
 - 🌗 **İki tema:** Koyu (gri-siyah) ve Siyah (saf siyah) — giriş ekranından
   veya sağ üstteki ay ikonundan değiştirilir, seçim hatırlanır.
 - 🔌 Bağlantı koparsa otomatik yeniden bağlanır
+- 👤 **Hesap sistemi** — kayıt ol / giriş yap (şifreler hash'li, oturum
+  token'lı); **profil özelleştirme**: görünen ad, renk, avatar emojisi;
+  sayfa yenilense de oturum korunur; misafir girişi de hâlâ var
+- 🗂️ **Kanal yönetimi** — metin ve ses kanalı **ekle/sil** (Discord gibi,
+  grup başlıklarındaki + butonu; kanalın üzerine gelince ✕); silinen ses
+  kanalındaki herkes otomatik çıkarılır
+- 🗑️ **Mesaj silme** — kendi mesajının üzerine gelince çöp kutusu butonu
+- 😊 **Emoji** — sohbet kutusundaki 😊 butonuyla emoji paleti (63 emoji)
 
 ## 🚀 Çalıştırma
 

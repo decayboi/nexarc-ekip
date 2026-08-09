@@ -17,9 +17,15 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const loginVisible = await p.evaluate(() => !!document.querySelector('#login-overlay:not(.hidden)'));
   log('1. Giriş ekranı görünür:', loginVisible);
 
-  // 2. Giriş yap
-  await p.evaluate(() => { document.querySelector('#login-name').value = 'MobilKullanici'; document.querySelector('#login-btn').click(); });
-  await p.waitForSelector('#app:not(.hidden)', { timeout: 10000 });
+  // 2. Kayıt ol / giriş yap
+  await p.evaluate(() => {
+    document.querySelector('#tab-register').click();
+    document.querySelector('#reg-username').value = 'mobil' + Date.now().toString(36);
+    document.querySelector('#reg-password').value = 'test1234';
+    document.querySelector('#reg-display').value = 'MobilKullanici';
+    document.querySelector('#register-btn').click();
+  });
+  await p.waitForSelector('#app:not(.hidden)', { timeout: 12000 });
   await wait(500);
 
   // 3. Hamburger butonu görünür mü (mobilde)

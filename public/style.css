@@ -133,7 +133,72 @@ body[data-theme="acik"] .server-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.
 .brand-name { font-size: 26px; font-weight: 700; letter-spacing: 6px; color: var(--text); }
 
 .login-card h1 { font-size: 21px; font-weight: 600; margin-bottom: 8px; }
-.login-card .sub { color: var(--muted); font-size: 13.5px; line-height: 1.55; margin-bottom: 24px; }
+.login-card .sub { color: var(--muted); font-size: 13.5px; line-height: 1.55; margin-bottom: 22px; }
+
+/* --- Giriş/Kayıt sekmeleri --- */
+.auth-tabs { display: flex; background: var(--bg3); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; margin-bottom: 14px; }
+.auth-tabs button {
+  flex: 1; border: none; background: transparent; color: var(--muted);
+  font-family: inherit; font-size: 13.5px; font-weight: 600;
+  padding: 9px; border-radius: 8px; cursor: pointer; transition: all .15s;
+}
+.auth-tabs button:hover { color: var(--text); }
+.auth-tabs button.sel { background: var(--accent); color: #000; }
+
+.auth-input {
+  width: 100%; padding: 12px 14px; margin-bottom: 10px;
+  background: var(--bg3); border: 1px solid var(--line); border-radius: 10px;
+  color: var(--text); font-size: 14px; font-family: inherit; outline: none;
+  transition: border-color .15s;
+}
+.auth-input:focus { border-color: var(--accent); }
+
+.auth-msg { min-height: 20px; margin-bottom: 10px; font-size: 13px; color: var(--red); line-height: 1.4; }
+.auth-msg:empty { margin-bottom: 4px; }
+
+.link-btn {
+  border: none; background: none; color: var(--muted); cursor: pointer;
+  font-size: 13px; font-family: inherit; margin-top: 16px; text-decoration: underline;
+  transition: color .15s;
+}
+.link-btn:hover { color: var(--accent); }
+
+/* --- Avatar (emoji) seçici --- */
+.avatar-pick { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 14px 0 18px; }
+.avatar-opt {
+  width: 36px; height: 36px; border-radius: 50%; font-size: 18px;
+  background: var(--bg3); border: 2px solid var(--line); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all .12s;
+}
+.avatar-opt:hover { transform: scale(1.12); }
+.avatar-opt.sel { border-color: var(--accent); background: var(--bg4); transform: scale(1.12); }
+
+/* --- Profil penceresi --- */
+.modal {
+  position: fixed; inset: 0; z-index: 250;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.modal.hidden { display: none; }
+.modal-card {
+  width: min(400px, 94vw); background: var(--bg2); border: 1px solid var(--line);
+  border-radius: 16px; padding: 26px 26px 20px; text-align: center;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+.modal-card h3 { margin-bottom: 16px; font-size: 17px; }
+.modal-btns { display: flex; gap: 8px; margin-top: 4px; }
+.modal-btns .primary-btn { flex: 1.2; }
+.modal-btns .secondary-btn { flex: 1; padding: 13px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg4); color: var(--red); font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; transition: background .15s; }
+.modal-btns .secondary-btn:hover { background: var(--red); color: #fff; }
+.modal-btns .ghost-btn { flex: 1; padding: 13px 10px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--muted); font-size: 14px; font-family: inherit; cursor: pointer; transition: color .15s, border-color .15s; }
+.modal-btns .ghost-btn:hover { color: var(--text); border-color: var(--accent); }
+#profile-btn {
+  width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--bg3); color: var(--muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: color .15s, border-color .15s, background .15s;
+}
+#profile-btn:hover { color: var(--text); border-color: var(--accent); background: var(--bg4); }
 
 #login-name {
   width: 100%; padding: 13px 16px;
@@ -187,18 +252,54 @@ body[data-theme="acik"] .server-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.
 /* ================= DÜZEN ================= */
 #app { display: flex; height: 100vh; }
 
-#server-sidebar { width: 76px; background: var(--bg); display: flex; flex-direction: column; align-items: center; padding-top: 14px; }
+/* Sol: sunucu simgesi şeridi (Discord gibi dar) */
+#server-sidebar { width: 72px; background: var(--bg); display: flex; flex-direction: column; align-items: center; padding-top: 14px; }
 .server-btn { margin-bottom: 12px; cursor: pointer; }
 
-.sidebar-scroll { overflow-y: auto; flex: 1; width: 100%; }
+/* Sol: kanal listesi paneli (geniş) */
+#channels-sidebar {
+  width: 248px; flex-shrink: 0;
+  background: var(--bg2); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.sidebar-scroll { overflow-y: auto; flex: 1; width: 100%; padding-bottom: 12px; }
 
 /* Kanallar çubuğu */
 #text-channels, #voice-channels { padding: 0 8px; }
-.channel-group { margin-bottom: 18px; }
+.channel-group { margin-bottom: 14px; }
+.group-label-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px 4px;
+}
 .group-label {
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.8px; color: var(--muted);
-  padding: 8px 12px 4px; user-select: none;
+  user-select: none;
 }
+.ch-add {
+  width: 20px; height: 20px; border: none; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  font-size: 15px; line-height: 1; display: flex; align-items: center; justify-content: center;
+  transition: color .15s, background .15s;
+}
+.ch-add:hover { color: var(--text); background: var(--bg4); }
+
+/* Yerinde kanal ekleme kutusu */
+#inline-add { padding: 4px 12px; }
+#inline-add input {
+  width: 100%; padding: 8px 10px; margin-bottom: 6px;
+  background: var(--bg3); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); font-size: 13px; font-family: inherit; outline: none;
+}
+#inline-add input:focus { border-color: var(--accent); }
+.inline-add-btns { display: flex; gap: 6px; }
+.mini-btn {
+  flex: 1; padding: 7px; border: none; border-radius: 8px;
+  background: var(--accent); color: #000; font-size: 12.5px; font-weight: 700;
+  font-family: inherit; cursor: pointer; transition: background .15s;
+}
+.mini-btn:hover { background: var(--accent-dark); }
+.mini-btn.ghost { background: var(--bg4); color: var(--muted); }
+.mini-btn.ghost:hover { background: var(--bg3); color: var(--text); }
 
 .channel {
   display: flex; align-items: center; gap: 8px;
@@ -206,6 +307,7 @@ body[data-theme="acik"] .server-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.
   background: transparent; border: none; border-radius: 8px;
   color: var(--muted); font-size: 14px; font-family: inherit; text-align: left;
   cursor: pointer; transition: background .12s, color .12s;
+  position: relative;
 }
 .channel svg { flex-shrink: 0; }
 .channel .ch-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
@@ -215,6 +317,18 @@ body[data-theme="acik"] .server-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.
 .ch-occupants { color: var(--muted); font-size: 12px; font-weight: 600; }
 .occ-dots { display: flex; gap: 3px; }
 .occ-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+/* Kanal silme butonu (hover'da görünür) */
+.channel-del {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; border: none; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  font-size: 11px; line-height: 1; display: none; align-items: center; justify-content: center;
+  transition: color .12s, background .12s;
+}
+.channel:hover .channel-del { display: flex; }
+.channel-del:hover { color: var(--red); background: rgba(242, 63, 67, 0.15); }
+.channel:hover .ch-name { padding-right: 18px; }
 
 /* Kanal sol aksan */
 #text-channels .channel.active, #voice-channels .channel.active {
@@ -258,6 +372,79 @@ body[data-theme="acik"] .server-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.
 .msg.system .msg-text { color: var(--muted); font-size: 12.5px; }
 
 #chat-form { display: flex; gap: 10px; padding: 14px 18px 18px; }
+
+/* --- Medya ekleme --- */
+#attach-btn {
+  width: 42px; height: 42px; border: 1px solid var(--line);
+  background: var(--bg3); color: var(--muted); border-radius: 10px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: color .15s, border-color .15s, background .15s; flex-shrink: 0;
+}
+#attach-btn:hover { color: var(--text); border-color: var(--accent); background: var(--bg4); }
+#attach-btn:disabled { opacity: .55; cursor: wait; }
+.upload-spin {
+  width: 16px; height: 16px; border: 2px solid var(--accent);
+  border-top-color: transparent; border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* --- Mesaj silme --- */
+#text-view { position: relative; }
+.msg { position: relative; }
+.msg-del {
+  position: absolute; right: 8px; top: 8px;
+  width: 24px; height: 24px; border: none; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  font-size: 13px; line-height: 1; display: none; align-items: center; justify-content: center;
+  transition: color .12s, background .12s;
+}
+.msg:hover .msg-del { display: flex; }
+.msg-del:hover { color: var(--red); background: rgba(242, 63, 67, 0.15); }
+
+/* --- Emoji seçici --- */
+#emoji-btn {
+  width: 42px; height: 42px; border: 1px solid var(--line);
+  background: var(--bg3); color: var(--muted); border-radius: 10px;
+  cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center;
+  transition: border-color .15s, background .15s; flex-shrink: 0;
+}
+#emoji-btn:hover { border-color: var(--accent); background: var(--bg4); }
+#emoji-picker {
+  position: absolute; bottom: 74px; left: 18px; z-index: 25;
+  width: min(340px, calc(100vw - 36px));
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px; box-shadow: 0 16px 50px rgba(0, 0, 0, 0.45);
+  display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px;
+  max-height: 240px; overflow-y: auto;
+}
+.emoji-item {
+  font-size: 21px; padding: 5px 3px; border-radius: 8px; cursor: pointer;
+  text-align: center; transition: background .1s;
+}
+.emoji-item:hover { background: var(--bg4); }
+
+/* --- Chat'te medya --- */
+.chat-media { margin-top: 6px; }
+.chat-media img {
+  max-width: min(420px, 100%); max-height: 300px;
+  border-radius: 10px; display: block; border: 1px solid var(--line);
+  cursor: zoom-in;
+}
+.chat-media video {
+  max-width: min(420px, 100%); max-height: 320px;
+  border-radius: 10px; display: block; background: #000; border: 1px solid var(--line);
+}
+.chat-media audio { width: min(300px, 100%); margin-top: 4px; }
+.media-file {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--bg3); border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 14px; color: var(--text); text-decoration: none; font-size: 13.5px;
+  transition: border-color .15s;
+}
+.media-file:hover { border-color: var(--accent); }
+.media-file .mf-name { font-weight: 600; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-file .mf-size { color: var(--muted); font-size: 11.5px; }
 #chat-input {
   flex: 1; padding: 12px 16px;
   background: var(--bg3); border: 1px solid var(--line); border-radius: 10px;
@@ -414,16 +601,16 @@ body[data-theme="acik"] .server-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.
     flex-shrink: 0;
   }
   #mobile-menu-btn:hover { background: var(--bg4); }
-  #server-sidebar {
+  #channels-sidebar {
     position: fixed; left: 0; top: 0; bottom: 0; z-index: 170;
-    width: 250px; background: var(--bg2);
+    width: 270px; background: var(--bg2);
     border-right: 1px solid var(--line);
     transform: translateX(-105%);
     transition: transform .25s ease;
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.45);
-    padding-top: 12px;
+    padding-top: 10px;
   }
-  body.menu-open #server-sidebar { transform: translateX(0); }
+  body.menu-open #channels-sidebar { transform: translateX(0); }
   #menu-overlay {
     position: fixed; inset: 0; z-index: 160;
     background: rgba(0, 0, 0, 0.55);
@@ -431,6 +618,7 @@ body[data-theme="acik"] .server-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.
   #menu-overlay.hidden { display: none; }
 }
 @media (max-width: 640px) {
+  #server-sidebar { display: none; }
   .ctl span { display: none; }
   .ctl { padding: 12px 16px; }
   /* Ekran paylaşımı mobilde desteklenmez → gizle */

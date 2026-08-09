@@ -46,12 +46,17 @@ async function login(page, name) {
   await page.goto(URL, { waitUntil: 'load', timeout: 20000 });
   log('  [login] goto OK');
   await wait(400);
-  log('  [login] isim set ediliyor...');
-  await page.evaluate((n) => { document.querySelector('#login-name').value = n; }, name);
-  log('  [login] isim set OK');
-  await domClick(page, '#login-btn');
-  log('  [login] katıl tıklandı');
-  await page.waitForSelector('#app:not(.hidden)', { timeout: 10000 });
+  log('  [login] kayıt formu dolduruluyor...');
+  await page.evaluate((n) => {
+    const uniq = n.toLowerCase().replace(/[^a-z0-9]/g, '') + Math.floor(Math.random() * 9999);
+    document.querySelector('#tab-register').click();
+    document.querySelector('#reg-username').value = uniq.slice(0, 20);
+    document.querySelector('#reg-password').value = 'test1234';
+    document.querySelector('#reg-display').value = n;
+    document.querySelector('#register-btn').click();
+  }, name);
+  log('  [login] kayıt gönderildi');
+  await page.waitForSelector('#app:not(.hidden)', { timeout: 12000 });
   log('  [login] uygulama açık');
   const s = await getState(page);
   log('  [login] durum kontrolü OK: ' + s.joined);
@@ -100,7 +105,11 @@ async function main() {
   });
 
   const uniq = Date.now().toString(36);
-  const pages = [await browser.newPage(), await browser.newPage(), await browser.newPage()];
+  const pages = [
+    await (await browser.createBrowserContext()).newPage(),
+    await (await browser.createBrowserContext()).newPage(),
+    await (await browser.createBrowserContext()).newPage(),
+  ];
   const names = ['Ali', 'Ayşe', 'Mert'].map((n) => `${n}-${uniq}`);
 
   try {

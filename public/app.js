@@ -45,6 +45,7 @@ initTheme();
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const initials = (name) => name.trim().split(/\s+/).map((w) => w[0] || '').join('').slice(0, 2).toUpperCase();
+const avatarOf = (u) => (u && u.avatar ? u.avatar : initials((u && u.name) || '?'));
 const fmtTime = (ts) => new Date(ts).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
 /* --- İkonlar (satır içi SVG) --- */
@@ -81,6 +82,11 @@ const state = {
 // Test/debug için dışarıdan erişim
 window.__nexarc = state;
 
+/* Oturum token'ı (kayıt/giriş sonrası saklanır) — connect olayından önce tanımlı olmalı */
+const AUTH = { token: null };
+try { AUTH.token = localStorage.getItem('nexarc-token') || null; } catch (e) {}
+window.__nexarcAuth = AUTH;
+
 /* ============================================================
    GENEL YARDIMCILAR
    ============================================================ */
@@ -103,45 +109,183 @@ function setTitle(title, sub) {
 }
 
 /* ============================================================
-   GİRİŞ
+   GİRİŞ / KAYIT / HESAP
    ============================================================ */
+const AVATARS = ['🚀', '🦊', '🐼', '🌵', '⚡', '🎧', '🎨', '🧑‍💻', '🐙', '🌙', '🔥', '👑'];
 let chosenColor = COLORS[0];
+let chosenAvatar = '';
 
-function buildColorPicker() {
-  const picker = $('#color-picker');
+function setAuthMsg(text) {
+  const el = $('#auth-msg');
+  if (el) el.textContent = text || '';
+}
+
+function buildColorPicker(containerSel, onPick) {
+  const picker = $(containerSel);
+  if (!picker) return;
   picker.innerHTML = '';
   COLORS.forEach((c) => {
     const s = document.createElement('span');
     s.className = 'color-swatch' + (c === chosenColor ? ' sel' : '');
     s.style.background = c;
-    s.onclick = () => { chosenColor = c; buildColorPicker(); };
+    s.onclick = () => { chosenColor = c; buildColorPicker(containerSel, onPick); onPick && onPick(c); };
     picker.appendChild(s);
   });
 }
 
+function buildAvatarPicker(containerSel, onPick) {
+  const picker = $(containerSel);
+  if (!picker) return;
+  picker.innerHTML = '';
+  AVATARS.forEach((a) => {
+    const s = document.createElement('span');
+    s.className = 'avatar-opt' + (a === chosenAvatar ? ' sel' : '');
+    s.textContent = a;
+    s.onclick = () => { chosenAvatar = a; buildAvatarPicker(containerSel, onPick); onPick && onPick(a); };
+    picker.appendChild(s);
+  });
+}
+
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tabs button').forEach((b) => b.classList.toggle('sel', b.id === 'tab-' + tab));
+  $('#panel-login').classList.toggle('hidden', tab !== 'login');
+  $('#panel-register').classList.toggle('hidden', tab !== 'register');
+  $('#panel-guest').classList.add('hidden');
+  $('#guest-link').textContent = 'Misafir olarak devam et';
+  setAuthMsg('');
+}
+
+$('#tab-login').onclick = () => switchAuthTab('login');
+$('#tab-register').onclick = () => switchAuthTab('register');
+$('#guest-link').onclick = () => {
+  document.querySelectorAll('.auth-tabs button').forEach((b) => b.classList.remove('sel'));
+  $('#panel-login').classList.add('hidden');
+  $('#panel-register').classList.add('hidden');
+  $('#panel-guest').classList.remove('hidden');
+  $('#guest-link').textContent = '◀ Giriş yap / Kayıt ol';
+  setAuthMsg('');
+};
+
+/* Giriş yap */
 function doLogin() {
-  const name = $('#login-name').value.trim() || 'Misafir';
+  const username = $('#login-username').value.trim();
+  const password = $('#login-password').value;
+  if (!username || !password) { setAuthMsg('Kullanıcı adı ve şifre gir'); return; }
+  setAuthMsg('');
+  socket.emit('login', { username, password }, (res) => {
+    if (!res || !res.ok) { setAuthMsg((res && res.error) || 'Giriş başarısız'); return; }
+    saveToken(res.token);
+    socket.emit('join', { token: res.token });
+  });
+}
+
+/* Kayıt ol */
+function doRegister() {
+  const username = $('#reg-username').value.trim();
+  const password = $('#reg-password').value;
+  const displayName = $('#reg-display').value.trim();
+  if (!username || !password || !displayName) { setAuthMsg('Tüm alanları doldur'); return; }
+  setAuthMsg('');
+  socket.emit('register', { username, password, displayName, color: chosenColor, avatar: chosenAvatar }, (res) => {
+    if (!res || !res.ok) { setAuthMsg((res && res.error) || 'Kayıt başarısız'); return; }
+    saveToken(res.token);
+    socket.emit('join', { token: res.token });
+  });
+}
+
+/* Misafir */
+function doGuest() {
+  const name = $('#guest-name').value.trim() || 'Misafir';
   state.joined = true;
-  socket.emit('join', { name, color: chosenColor });
+  socket.emit('join', { name, color: chosenColor, avatar: chosenAvatar });
+}
+
+function saveToken(t) {
+  AUTH.token = t;
+  try { localStorage.setItem('nexarc-token', t || ''); } catch (e) {}
+}
+
+/* Otomatik giriş (kayıtlı token varsa) */
+function tryAutoLogin() {
+  if (!AUTH.token) return;
+  socket.emit('auto-login', { token: AUTH.token }, (res) => {
+    if (res && res.ok) socket.emit('join', { token: AUTH.token });
+    else { saveToken(null); }
+  });
 }
 
 $('#login-btn').onclick = doLogin;
-$('#login-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
-$('#login-name').value = 'Misafir-' + Math.floor(10 + Math.random() * 89);
-buildColorPicker();
+$('#login-username').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+$('#login-password').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+$('#register-btn').onclick = doRegister;
+$('#reg-username').addEventListener('keydown', (e) => { if (e.key === 'Enter') doRegister(); });
+$('#reg-password').addEventListener('keydown', (e) => { if (e.key === 'Enter') doRegister(); });
+$('#reg-display').addEventListener('keydown', (e) => { if (e.key === 'Enter') doRegister(); });
+$('#guest-btn').onclick = doGuest;
+$('#guest-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') doGuest(); });
+buildColorPicker('#reg-color-picker');
+buildAvatarPicker('#reg-avatar-pick');
+buildColorPicker('#guest-color-picker');
+switchAuthTab('login');
+
+/* --- Profil penceresi --- */
+function openProfile() {
+  if (!state.self) return;
+  $('#prof-display').value = state.self.name || '';
+  const isAccount = !!(state.self.username);
+  $('#prof-logout').classList.toggle('hidden', !isAccount);
+  $('#prof-note').textContent = isAccount
+    ? 'Hesabınla girişli — değişiklikler kalıcıdır.'
+    : 'Misafirsin — değişiklikler yalnızca bu oturumda geçerli.';
+  buildColorPicker('#prof-color-picker');
+  buildAvatarPicker('#prof-avatar-pick');
+  $('#profile-modal').classList.remove('hidden');
+}
+function closeProfile() { $('#profile-modal').classList.add('hidden'); }
+
+$('#profile-btn').onclick = openProfile;
+$('#prof-close').onclick = closeProfile;
+$('#profile-modal').addEventListener('click', (e) => { if (e.target === $('#profile-modal')) closeProfile(); });
+
+$('#prof-save').onclick = () => {
+  const displayName = $('#prof-display').value.trim();
+  if (!displayName) { toast('Görünen ad boş olamaz'); return; }
+  socket.emit('update-profile', { displayName, color: chosenColor, avatar: chosenAvatar }, (res) => {
+    if (res && res.ok) {
+      state.self = { ...state.self, ...res.user };
+      toast('Profil güncellendi');
+      closeProfile();
+    } else {
+      toast((res && res.error) || 'Profil güncellenemedi');
+    }
+  });
+};
+
+$('#prof-logout').onclick = () => {
+  saveToken(null);
+  location.reload();
+};
 
 /* ============================================================
    SOCKET OLAYLARI
    ============================================================ */
 socket.on('connect', () => {
   setConn(true);
-  if (state.joined) socket.emit('join', { name: state.self?.name || 'Misafir', color: state.self?.color || chosenColor });
+  if (state.joined && AUTH.token) {
+    // Oturum yeniden kuruldu: token ile tekrar katıl
+    socket.emit('join', { token: AUTH.token });
+  } else if (state.joined) {
+    socket.emit('join', { name: state.self?.name || 'Misafir', color: state.self?.color || chosenColor });
+  } else {
+    tryAutoLogin();
+  }
 });
 
 socket.on('disconnect', () => setConn(false));
 
 socket.on('init', ({ self, channels }) => {
   state.self = self;
+  state.joined = true;
   state.channels = channels;
   $('#login-overlay').classList.add('hidden');
   $('#app').classList.remove('hidden');
@@ -224,6 +368,33 @@ socket.on('screen-state', ({ userId, sharing }) => {
   renderMembers();
 });
 
+/* --- Kanal listesi güncellendi (ekleme/silme) --- */
+socket.on('channels-updated', ({ channels }) => {
+  state.channels = channels;
+  // Aktif metin kanalı silindiyse ilk metin kanalına geç
+  if (state.textChannel && !channels.find((c) => c.id === state.textChannel)) {
+    const t = channels.find((c) => c.type === 'text');
+    if (t) selectTextChannel(t.id);
+  }
+  // Aktif ses kanalı silindiyse yerel temizlik yap
+  if (state.voiceChannel && !channels.find((c) => c.id === state.voiceChannel)) {
+    localVoiceReset('Kanal silindi — ses kanalından çıkarıldın');
+  }
+  renderChannels();
+  renderMembers();
+  if (state.voiceChannel) renderVoiceGrid();
+});
+
+socket.on('voice-kicked', ({ channelId }) => {
+  localVoiceReset('Kanal silindi — ses kanalından çıkarıldın');
+});
+
+/* --- Mesaj silindi --- */
+socket.on('message-deleted', ({ messageId }) => {
+  const el = document.querySelector(`.msg[data-mid="${messageId}"]`);
+  if (el) el.remove();
+});
+
 /* --- Sinyal --- */
 socket.on('signal', ({ from, pcType, data }) => handleSignal(from, pcType, data));
 
@@ -255,11 +426,13 @@ function renderChannels() {
   voices.innerHTML = '';
 
   for (const ch of state.channels) {
+    const del = `<button class="channel-del" title="'${esc(ch.name)}' kanalını sil">✕</button>`;
     if (ch.type === 'text') {
       const el = document.createElement('button');
       el.className = 'channel' + (state.textChannel === ch.id ? ' active' : '');
-      el.innerHTML = `${ICON.hash}<span class="ch-name">${esc(ch.name)}</span>`;
+      el.innerHTML = `${ICON.hash}<span class="ch-name">${esc(ch.name)}</span>${del}`;
       el.onclick = () => selectTextChannel(ch.id);
+      el.querySelector('.channel-del').onclick = (e) => { e.stopPropagation(); confirmDeleteChannel(ch); };
       texts.appendChild(el);
     } else {
       const el = document.createElement('button');
@@ -269,11 +442,47 @@ function renderChannels() {
       const dots = occ.length
         ? `<span class="occ-dots">${occ.map((u) => `<span class="occ-dot" style="background:${esc(u.color)}"></span>`).join('')}</span>`
         : '';
-      el.innerHTML = `${ICON.speaker}<span class="ch-name">${esc(ch.name)}</span><span class="ch-occupants">${occ.length || ''}</span>${dots}`;
+      el.innerHTML = `${ICON.speaker}<span class="ch-name">${esc(ch.name)}</span><span class="ch-occupants">${occ.length || ''}</span>${dots}${del}`;
       el.onclick = () => (inChannel ? leaveVoice() : joinVoice(ch.id));
+      el.querySelector('.channel-del').onclick = (e) => { e.stopPropagation(); confirmDeleteChannel(ch); };
       voices.appendChild(el);
     }
   }
+}
+
+/* ---- Kanal ekleme (yerinde kutucuk) ---- */
+let inlineAddType = 'text';
+function openInlineAdd(type) {
+  inlineAddType = type;
+  $('#inline-add').classList.remove('hidden');
+  $('#inline-add-name').value = '';
+  $('#inline-add-name').focus();
+}
+function closeInlineAdd() {
+  $('#inline-add').classList.add('hidden');
+}
+function submitInlineAdd() {
+  const name = $('#inline-add-name').value.trim();
+  if (!name) { toast('Kanal adı yaz'); return; }
+  socket.emit('channel-create', { name, type: inlineAddType }, (res) => {
+    if (!res || !res.ok) { toast((res && res.error) || 'Kanal oluşturulamadı'); return; }
+    toast(`"${res.channel.name}" kanalı oluşturuldu`);
+    if (res.channel.type === 'text') selectTextChannel(res.channel.id);
+    closeInlineAdd();
+  });
+}
+$('#add-text-btn').onclick = () => openInlineAdd('text');
+$('#add-voice-btn').onclick = () => openInlineAdd('voice');
+$('#inline-add-ok').onclick = submitInlineAdd;
+$('#inline-add-cancel').onclick = closeInlineAdd;
+$('#inline-add-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitInlineAdd(); if (e.key === 'Escape') closeInlineAdd(); });
+
+/* ---- Kanal silme ---- */
+function confirmDeleteChannel(ch) {
+  if (!window.confirm(`"${ch.name}" kanalı silinsin mi?`)) return;
+  socket.emit('channel-delete', { channelId: ch.id }, (res) => {
+    if (!res || !res.ok) toast((res && res.error) || 'Kanal silinemedi');
+  });
 }
 
 function renderMembers() {
@@ -287,7 +496,7 @@ function renderMembers() {
       ? (state.channels.find((c) => c.id === u.voiceChannel)?.name || 'ses kanalında')
       : 'Çevrimdışı kanal';
     el.innerHTML = `
-      <span class="avatar" style="background:${esc(u.color)}">${esc(initials(u.name))}<span class="presence"></span></span>
+      <span class="avatar" style="background:${esc(u.color)}">${esc(avatarOf(u))}<span class="presence"></span></span>
       <div class="member-info">
         <div class="member-name">${esc(u.name)}${u.id === state.self?.id ? ' <span style="color:var(--muted)">(sen)</span>' : ''}</div>
         <div class="member-status">${esc(status)}</div>
@@ -322,14 +531,28 @@ function renderMessages(messages) {
 
 function appendMessage(msg, scroll) {
   const box = $('#messages');
+  const isOwn = msg.user.id === state.self?.id;
   const el = document.createElement('div');
-  el.className = 'msg';
+  el.className = 'msg' + (isOwn ? ' own' : '');
+  el.dataset.mid = msg.id;
+  const delBtn = isOwn
+    ? `<button class="msg-del" title="Mesajı sil">🗑</button>`
+    : '';
   el.innerHTML = `
-    <span class="avatar" style="background:${esc(msg.user.color)}">${esc(initials(msg.user.name))}</span>
+    <span class="avatar" style="background:${esc(msg.user.color)}">${esc(avatarOf(msg.user))}</span>
     <div class="msg-body">
       <div class="msg-head"><span class="msg-name">${esc(msg.user.name)}</span><span class="msg-time">${fmtTime(msg.ts)}</span></div>
-      <div class="msg-text">${esc(msg.text)}</div>
-    </div>`;
+      ${msg.text ? `<div class="msg-text">${esc(msg.text)}</div>` : ''}
+      ${mediaHtml(msg.media)}
+    </div>${delBtn}`;
+  if (isOwn) {
+    const del = el.querySelector('.msg-del');
+    if (del) del.onclick = () => {
+      socket.emit('delete-message', { channelId: state.textChannel, messageId: msg.id }, (res) => {
+        if (!res || !res.ok) toast((res && res.error) || 'Mesaj silinemedi');
+      });
+    };
+  }
   box.appendChild(el);
   // Yeni mesaj görünür olsun: en alttaysan veya tarihçe yüklenirken kaydır
   const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 160;
@@ -340,13 +563,105 @@ $('#chat-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const input = $('#chat-input');
   const text = input.value.trim();
-  if (!text || !state.textChannel) return;
+  if ((!text || !state.textChannel)) return;
   socket.emit('chat', { channelId: state.textChannel, text });
   input.value = '';
   input.focus();
   // Kendi mesajını gönderince chat otomatik en alta kayar
   $('#messages').scrollTop = $('#messages').scrollHeight;
 });
+
+/* --- Medya yükleme (📎) --- */
+function fmtSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+function mediaHtml(m) {
+  if (!m || !m.url) return '';
+  const t = String(m.type || '');
+  const url = esc(m.url);
+  const name = esc(m.name || 'dosya');
+  if (t.startsWith('image/')) {
+    return `<div class="chat-media"><a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${name}" loading="lazy"/></a></div>`;
+  }
+  if (t.startsWith('video/')) {
+    return `<div class="chat-media"><video src="${url}" controls preload="metadata"></video></div>`;
+  }
+  if (t.startsWith('audio/')) {
+    return `<div class="chat-media"><audio src="${url}" controls preload="metadata"></audio></div>`;
+  }
+  return `<div class="chat-media"><a class="media-file" href="${url}" download="${name}"><span>📄</span><span class="mf-name">${name}</span><span class="mf-size">${fmtSize(m.size)}</span></a></div>`;
+}
+
+/* --- Emoji paleti --- */
+const EMOJIS = ['ツ','😀','😁','😂','🤣','😊','😍','🤩','😎','🥳','😢','😭','😡','🤯','😴','🤔','🙄','👍','👎','👏','🙏','💪','🤝','✌️','🤞','👌','❤️','🧡','💛','💚','💙','💜','🖤','🤍','💯','🔥','✨','🎉','🎂','🎁','💡','🚀','⭐','🌟','🌈','☀️','🌙','⚡','🐶','🐱','🦊','🐼','🐸','🐙','🦄','🌵','🌸','🍕','🍔','☕','🍀','🎧','🎨','👑'];
+function buildEmojiPicker() {
+  const box = $('#emoji-picker');
+  if (!box || box.children.length) return;
+  EMOJIS.forEach((e) => {
+    const s = document.createElement('span');
+    s.className = 'emoji-item';
+    s.textContent = e;
+    s.onclick = () => insertEmoji(e);
+    box.appendChild(s);
+  });
+}
+function insertEmoji(e) {
+  const input = $('#chat-input');
+  const pos = input.selectionStart ?? input.value.length;
+  input.value = input.value.slice(0, pos) + e + input.value.slice(pos);
+  input.focus();
+  const np = pos + e.length;
+  try { input.setSelectionRange(np, np); } catch (err) {}
+}
+const emojiBtn = $('#emoji-btn');
+if (emojiBtn) {
+  buildEmojiPicker();
+  emojiBtn.onclick = (e) => { e.preventDefault(); $('#emoji-picker').classList.toggle('hidden'); };
+  document.addEventListener('click', (e) => {
+    const picker = $('#emoji-picker');
+    if (!picker || picker.classList.contains('hidden')) return;
+    if (!picker.contains(e.target) && e.target !== emojiBtn) picker.classList.add('hidden');
+  });
+}
+
+const attachBtn = $('#attach-btn');
+const mediaInput = $('#media-input');
+if (attachBtn && mediaInput) {
+  attachBtn.onclick = (e) => { e.preventDefault(); mediaInput.click(); };
+  mediaInput.onchange = async () => {
+    const file = mediaInput.files[0];
+    mediaInput.value = '';
+    if (!file) return;
+    if (!state.textChannel) { toast('Önce bir metin kanalı seç'); return; }
+    if (file.size > 25 * 1024 * 1024) { toast('Dosya 25 MB sınırını aşıyor'); return; }
+    const btn = attachBtn;
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="upload-spin"></span>';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const resp = await fetch('/upload', { method: 'POST', body: fd });
+      if (!resp.ok) throw new Error('sunucu hatası');
+      const data = await resp.json();
+      socket.emit('chat', {
+        channelId: state.textChannel,
+        text: '',
+        media: { url: data.url, name: data.name, size: data.size, type: data.type },
+      });
+      $('#messages').scrollTop = $('#messages').scrollHeight;
+    } catch (e) {
+      toast('Dosya yüklenemedi — tekrar dene');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+  };
+}
 
 /* ============================================================
    SES GÖRÜNÜMÜ
@@ -372,7 +687,7 @@ function renderVoiceGrid() {
     const muteBadge = isSelf && !state.micOn
       ? `<span class="mute-badge">${ICON.micOff}</span>` : '';
     el.innerHTML = `
-      <span class="avatar" style="background:${esc(u.color)}">${esc(initials(u.name))}${muteBadge}</span>
+      <span class="avatar" style="background:${esc(u.color)}">${esc(avatarOf(u))}${muteBadge}</span>
       <div class="vcard-name">${esc(u.name)}${isSelf ? ' <span style="color:var(--muted)">(sen)</span>' : ''}</div>
       <div class="vcard-status">${u.sharing ? '<span class="badge-share">Ekran Paylaşılıyor</span>' : (isSelf ? (state.micOn ? 'Mikrofon açık' : 'Mikrofon kapalı') : 'Ses kanalında')}</div>`;
     grid.appendChild(el);
@@ -692,17 +1007,29 @@ function joinVoice(channelId) {
   socket.emit('voice-join', { channelId });
 }
 
-function leaveVoice() {
+/* Ses kanalı durumunu yerel olarak sıfırla (çıkış veya kanal silinmesi) */
+function localVoiceReset(toastMsg) {
   state.wantedVoice = null;
-  socket.emit('voice-leave');
   for (const id of [...state.voicePCs.keys()]) removePeer(id);
   if (state.localStream) { state.localStream.getTracks().forEach((t) => t.stop()); state.localStream = null; }
   if (state.screenStream) stopScreen();
   state.voiceChannel = null;
   $('#voice-view').classList.add('hidden');
-  if (state.textChannel) selectTextChannel(state.textChannel);
+  if (toastMsg) toast(toastMsg);
+  if (!state.textChannel || !state.channels.find((c) => c.id === state.textChannel)) {
+    const t = state.channels.find((c) => c.type === 'text');
+    if (t) selectTextChannel(t.id);
+  } else if ($('#text-view').classList.contains('hidden')) {
+    selectTextChannel(state.textChannel);
+  }
   renderChannels();
   renderMembers();
+}
+
+function leaveVoice() {
+  state.wantedVoice = null;
+  socket.emit('voice-leave');
+  localVoiceReset();
 }
 
 function toggleMic() {
@@ -775,4 +1102,3 @@ $('#share-btn').onclick = toggleScreen;
 $('#leave-btn').onclick = leaveVoice;
 // Ayrıl butonunu doldur (ikonsuz boş kalmasın)
 $('#leave-btn').innerHTML = `${ICON.leave}<span>Ses Kanalından Ayrıl</span>`;
-ice;
