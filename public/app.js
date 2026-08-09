@@ -19,8 +19,8 @@ const ICE = {
 
 const COLORS = ['#ff725e', '#5865f2', '#3ba55d', '#faa61a', '#eb459e', '#00b0f4', '#9b59b6', '#23a55a'];
 
-/* --- Tema: Koyu (gri-siyah) / Siyah (saf siyah) --- */
-const THEMES = ['koyu', 'siyah'];
+/* --- Tema: Açık / Koyu / Siyah --- */
+const THEMES = ['acik', 'koyu', 'siyah'];
 function applyTheme(theme, persist = true) {
   document.body.dataset.theme = theme;
   document.querySelectorAll('#login-theme button').forEach((b) =>
@@ -35,7 +35,11 @@ function initTheme() {
   document.querySelectorAll('#login-theme button').forEach((b) => {
     b.onclick = () => applyTheme(b.dataset.themeOpt);
   });
-  $('#theme-btn').onclick = () => applyTheme(document.body.dataset.theme === 'siyah' ? 'koyu' : 'siyah');
+  // Üst bardaki ay ikonu: Açık → Koyu → Siyah → Açık döngüsü
+  $('#theme-btn').onclick = () => {
+    const idx = THEMES.indexOf(document.body.dataset.theme);
+    applyTheme(THEMES[(idx + 1) % THEMES.length]);
+  };
 }
 initTheme();
 
@@ -308,7 +312,9 @@ function appendMessage(msg, scroll) {
       <div class="msg-text">${esc(msg.text)}</div>
     </div>`;
   box.appendChild(el);
-  if (scroll) box.scrollTop = box.scrollHeight;
+  // Yeni mesaj görünür olsun: en alttaysan veya tarihçe yüklenirken kaydır
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 160;
+  if (scroll || nearBottom) box.scrollTop = box.scrollHeight;
 }
 
 $('#chat-form').addEventListener('submit', (e) => {
@@ -319,6 +325,8 @@ $('#chat-form').addEventListener('submit', (e) => {
   socket.emit('chat', { channelId: state.textChannel, text });
   input.value = '';
   input.focus();
+  // Kendi mesajını gönderince chat otomatik en alta kayar
+  $('#messages').scrollTop = $('#messages').scrollHeight;
 });
 
 /* ============================================================
@@ -745,4 +753,6 @@ function updateShareUI() {
 $('#mic-btn').onclick = toggleMic;
 $('#share-btn').onclick = toggleScreen;
 $('#leave-btn').onclick = leaveVoice;
+// Ayrıl butonunu doldur (ikonsuz boş kalmasın)
+$('#leave-btn').innerHTML = `${ICON.leave}<span>Ses Kanalından Ayrıl</span>`;
 ice;

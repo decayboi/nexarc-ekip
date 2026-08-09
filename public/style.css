@@ -38,6 +38,28 @@ body[data-theme="siyah"] ::-webkit-scrollbar-thumb:hover { background: #33333a; 
 body[data-theme="siyah"] .msg:hover { background: rgba(255, 255, 255, 0.04); }
 body[data-theme="siyah"] .login-card { box-shadow: 0 24px 70px rgba(0, 0, 0, 0.8); }
 
+/* ============ AÇIK TEMA (aydınlık) ============ */
+body[data-theme="acik"] {
+  --bg: #eceef1;
+  --bg2: #f6f7f9;
+  --bg3: #ffffff;
+  --bg4: #e2e5e9;
+  --line: #d4d7dc;
+  --text: #1c1f23;
+  --muted: #5c6470;
+}
+body[data-theme="acik"] ::-webkit-scrollbar-thumb { background: #c2c7cf; }
+body[data-theme="acik"] ::-webkit-scrollbar-thumb:hover { background: #a8aeb7; }
+body[data-theme="acik"] .msg:hover { background: rgba(0, 0, 0, 0.045); }
+body[data-theme="acik"] .login-card { box-shadow: 0 24px 70px rgba(25, 35, 55, 0.16); }
+body[data-theme="acik"] #conn-dot { background: var(--red); }
+body[data-theme="acik"] .screen-label { background: rgba(255, 255, 255, 0.9); color: #1c1f23; }
+body[data-theme="acik"] .screen-btn { background: rgba(255, 255, 255, 0.9); color: #1c1f23; }
+body[data-theme="acik"] .screen-btn:hover { background: var(--accent); color: #000; }
+body[data-theme="acik"] .screen-card video { background: #101214; }
+body[data-theme="acik"] .live-dot { background: var(--accent); }
+body[data-theme="acik"] .server-btn:hover .server-logo { filter: none; }
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html, body { height: 100%; }
@@ -77,6 +99,26 @@ body {
 }
 
 .brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 26px; }
+
+/* Nexarc logosu (giriş ekranı) — beyaz zeminli çerçeve: koyu temalarda da görünür */
+.brand-logo {
+  width: 56px; height: 56px; object-fit: contain;
+  background: #ffffff; padding: 7px;
+  border-radius: 16px; border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  user-select: none;
+}
+/* Nexarc logosu (sol kenar çubuğu) — aynı çerçeve */
+.server-logo {
+  width: 48px; height: 48px; object-fit: contain;
+  background: #ffffff; padding: 5px;
+  border-radius: 13px; border: 1px solid rgba(0, 0, 0, 0.08);
+  display: block; user-select: none;
+  transition: transform .15s, filter .15s;
+}
+body[data-theme="acik"] .brand-logo,
+body[data-theme="acik"] .server-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.12); }
+.server-btn:hover .server-logo { transform: scale(1.06); filter: brightness(1.1); }
 
 .brand-mark {
   display: inline-flex; align-items: center; justify-content: center;
