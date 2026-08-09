@@ -1,0 +1,21 @@
+{
+  "name": "nexarc-ekip",
+  "version": "1.0.0",
+  "description": "Nexarc için 3 kişilik ekip uygulaması — ses kanalları, ekran paylaşımı ve mesajlaşma",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/three-client-test.js",
+    "test:e2e": "cd test/e2e && node browser-test.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}

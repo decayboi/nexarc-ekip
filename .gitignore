@@ -1,0 +1,10 @@
+# Node bağımlılıkları (asla yüklenmemeli)
+node_modules/
+test/e2e/node_modules/
+
+# Sistem dosyaları
+.DS_Store
+Thumbs.db
+
+# Loglar
+*.log
