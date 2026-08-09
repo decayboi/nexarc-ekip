@@ -504,9 +504,26 @@ body[data-theme="acik"] .top-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.12)
 /* --- Ses kartı: konuşan halkası + ses seviyesi --- */
 .voice-card.speaking { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255, 114, 94, 0.35); }
 .voice-card.speaking .avatar { box-shadow: 0 0 0 3px var(--accent); }
-.vol-row { display: flex; align-items: center; gap: 6px; width: 100%; }
-.vol-row input[type="range"] { flex: 1; accent-color: var(--accent); height: 4px; cursor: pointer; }
-.vol-row .vol-icon { font-size: 12px; color: var(--muted); }
+.vol-btn {
+  width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 50%;
+  background: var(--bg4); color: var(--muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 12px;
+  transition: color .15s, border-color .15s, background .15s; margin-top: 4px;
+}
+.vol-btn:hover { color: var(--text); border-color: var(--accent); background: var(--bg3); }
+#vol-pop {
+  position: fixed; z-index: 130;
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 14px; box-shadow: 0 16px 45px rgba(0, 0, 0, 0.5);
+  display: flex; flex-direction: column; gap: 8px; min-width: 180px;
+}
+#vol-pop.hidden { display: none; }
+#vol-pop .vp-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; color: var(--muted); font-weight: 600;
+}
+#vol-pop .vp-val { color: var(--accent); font-weight: 700; }
+#vol-pop input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
 .voice-card .muted-badge {
   font-size: 10.5px; font-weight: 700; color: var(--red);
   border: 1px solid var(--red); border-radius: 999px; padding: 2px 8px;
@@ -604,12 +621,15 @@ body[data-theme="acik"] .top-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.12)
 }
 #chat-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 114, 94, 0.15); }
 #send-btn {
-  padding: 0 24px; border: none; border-radius: 14px;
-  background: var(--accent); color: #000; font-weight: 700; font-size: 14px;
-  font-family: inherit; cursor: pointer; transition: background .15s, transform .05s;
+  width: 40px; height: 40px; padding: 0; flex-shrink: 0;
+  border: none; border-radius: 13px;
+  background: var(--accent); color: #000;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background .15s, transform .05s, box-shadow .15s;
+  box-shadow: 0 4px 12px rgba(255, 114, 94, 0.25);
 }
 #send-btn:hover { background: var(--accent-dark); }
-#send-btn:active { transform: scale(0.97); }
+#send-btn:active { transform: scale(0.93); }
 
 /* --- Ses görünümü --- */
 #voice-view { padding: 18px; gap: 16px; }
@@ -784,3 +804,28 @@ body[data-theme="acik"] .top-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.12)
   font-size: 10px; color: var(--muted); letter-spacing: 1px; user-select: none;
 }
 #members-sidebar { position: relative; }
+
+/* --- Fotoğraf avatarları --- */
+.avatar-img {
+  width: 100%; height: 100%; object-fit: cover;
+  border-radius: 50%; display: block; user-select: none;
+}
+
+/* --- Profil fotoğrafı satırı --- */
+.prof-photo-row { display: flex; align-items: center; gap: 12px; justify-content: center; margin-bottom: 4px; }
+.prof-avatar-preview {
+  width: 72px; height: 72px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; font-weight: 700; color: #111;
+  overflow: hidden; flex-shrink: 0;
+}
+.prof-photo-btns { display: flex; flex-direction: column; gap: 6px; }
+.prof-photo-btns .mini-btn { padding: 8px 12px; white-space: nowrap; }
+#prof-emoji-wrap { justify-content: center; margin: 8px 0 4px; }
+
+/* DM kanalı görünümü */
+.channel.dm .ch-name { color: var(--accent); font-weight: 600; }
+.channel.dm svg { color: var(--accent); }
+
+/* Kullanıcı kartı durum mesajı */
+.user-status-text { font-size: 13px; color: var(--muted); margin-bottom: 14px; font-style: italic; }

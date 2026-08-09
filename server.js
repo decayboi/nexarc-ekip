@@ -92,7 +92,7 @@ function sanitizeAccount(username) {
 
 const sanitize = (u) => ({
   id: u.id, name: u.name, color: u.color, avatar: u.avatar || '', username: u.username || null,
-  role: u.role || 'member', status: u.status || 'online',
+  role: u.role || 'member', status: u.status || 'online', statusText: u.statusText || '',
   voiceChannel: u.voiceChannel, sharing: !!u.sharing, camera: !!u.camera, muted: !!u.muted,
 });
 const statePayload = () => ({ users: [...users.values()].map(sanitize) });
@@ -170,9 +170,10 @@ io.on('connection', (socket) => {
       username: account ? account.username : null,
       name: account ? account.displayName : (String(name || '').trim().slice(0, 24) || 'Misafir'),
       color: account ? account.color : String(color || '#ff725e').slice(0, 7),
-      avatar: account ? account.avatar : String(avatar || '').slice(0, 8),
+      avatar: account ? account.avatar : String(avatar || '').slice(0, 200),
       role: account ? account.role : 'member',
       status: account ? account.status : 'online',
+      statusText: account ? (account.statusText || '') : '',
       voiceChannel: null, sharing: false, camera: false, muted: false,
     };
     users.set(socket.id, user);
@@ -183,21 +184,25 @@ io.on('connection', (socket) => {
   });
 
   /* ---- Profil / durum ---- */
-  socket.on('update-profile', ({ displayName, color, avatar, status }, cb) => {
+  socket.on('update-profile', ({ displayName, color, avatar, status, statusText }, cb) => {
     const user = users.get(socket.id);
     if (!user) return cb && cb({ ok: false, error: 'Oturum yok' });
     const disp = String(displayName || '').trim();
     if (!disp || disp.length > 24) return cb && cb({ ok: false, error: 'Görünen ad 1-24 karakter olmalı' });
     user.name = disp.slice(0, 24);
     user.color = String(color || '#ff725e').slice(0, 7);
-    user.avatar = String(avatar || '').slice(0, 8);
+    // Avatar: emoji (kısa) veya yüklenmiş fotoğraf URL'si
+    const av = String(avatar || '').slice(0, 200);
+    user.avatar = (av.startsWith('/uploads/') || av.length <= 8) ? av : '';
     if (['online', 'idle', 'dnd'].includes(status)) user.status = status;
+    user.statusText = String(statusText || '').trim().slice(0, 60);
     const accName = socketAccounts.get(socket.id);
     if (accName && accounts[accName]) {
       accounts[accName].displayName = user.name;
       accounts[accName].color = user.color;
       accounts[accName].avatar = user.avatar;
       accounts[accName].status = user.status;
+      accounts[accName].statusText = user.statusText;
       saveAccounts();
     }
     io.emit('state', statePayload());
@@ -237,13 +242,12 @@ io.on('connection', (socket) => {
     socket.join('ch:' + roomId);
     const peer = accounts[target];
     cb && cb({ ok: true, roomId, peer: { name: peer.displayName, username: target, color: peer.color, avatar: peer.avatar || '', role: peer.role } });
-    // Karşı taraf çevrimiçiyse kanal listesi güncellensin
+    // Yalnızca DM'deki iki kişinin kanal listesi güncellensin (herkese değil!)
     for (const [sid, u] of users) {
-      if (u.username === target) {
+      if (u.username === user.username || u.username === target) {
         io.to(sid).emit('channels-updated', { channels: getChannelsFor(u) });
       }
     }
-    io.emit('channels-updated', { channels: getChannelsFor(user) });
   });
 
   socket.on('chat', ({ channelId, text, media, replyTo }) => {

@@ -72,7 +72,11 @@ const URL = 'http://localhost:3000';
   await a.evaluate(() => {
     document.querySelector('#profile-btn').click();
     document.querySelector('#prof-display').value = 'Ali Yeni';
-    document.querySelectorAll('#prof-avatar-pick .avatar-opt')[3].click();
+    document.querySelector('#prof-emoji-btn').click();
+  });
+  await wait(400);
+  await a.evaluate(() => {
+    document.querySelectorAll('#prof-emoji-wrap .avatar-opt')[3].click();
     document.querySelector('#prof-save').click();
   });
   await wait(1000);

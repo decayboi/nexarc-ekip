@@ -142,7 +142,9 @@
           </button>
           <input type="file" id="media-input" hidden accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.doc,.docx" />
           <input id="chat-input" placeholder="Mesaj gönder" maxlength="2000" />
-          <button type="submit" id="send-btn">Gönder</button>
+          <button type="submit" id="send-btn" title="Gönder">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M3.4 20.4l17.45-7.48a1 1 0 0 0 0-1.84L3.4 3.6a.993.993 0 0 0-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z"/></svg>
+          </button>
         </form>
         <div id="emoji-picker" class="hidden"></div>
       </section>
@@ -166,7 +168,7 @@
     <aside id="members-sidebar">
       <div class="group-label" id="members-title">ÜYELER — 0</div>
       <div id="members"></div>
-      <div class="ver-tag" title="Uygulama sürümü">Nexarc v3.1</div>
+      <div class="ver-tag" title="Uygulama sürümü">Nexarc v3.3</div>
     </aside>
   </div>
 
@@ -174,9 +176,21 @@
   <div id="profile-modal" class="modal hidden">
     <div class="modal-card">
       <h3>Profilini Özelleştir</h3>
+      <div class="prof-row">
+        <label>Profil fotoğrafı</label>
+        <div class="prof-photo-row">
+          <span class="avatar prof-avatar-preview" id="prof-avatar-preview" style="background:#ff725e">?</span>
+          <div class="prof-photo-btns">
+            <button id="prof-photo-btn" class="mini-btn">📷 Fotoğraf Yükle</button>
+            <button id="prof-emoji-btn" class="mini-btn ghost">😊 Emoji Seç</button>
+            <button id="prof-photo-clear" class="mini-btn ghost">Kaldır</button>
+            <input type="file" id="prof-photo-input" hidden accept="image/*" />
+          </div>
+        </div>
+      </div>
+      <div id="prof-emoji-wrap" class="avatar-pick hidden"></div>
       <input id="prof-display" class="auth-input" maxlength="24" placeholder="Görünen ad" />
       <div class="colors" id="prof-color-picker"></div>
-      <div class="avatar-pick" id="prof-avatar-pick"></div>
       <div class="prof-row">
         <label>Durum</label>
         <select id="prof-status" class="auth-input">
@@ -184,6 +198,10 @@
           <option value="idle">🟡 Boşta</option>
           <option value="dnd">🔴 Rahatsız etmeyin</option>
         </select>
+      </div>
+      <div class="prof-row">
+        <label>Durum mesajı</label>
+        <input id="prof-status-text" class="auth-input" maxlength="60" placeholder="Örn: Tasarım yapıyorum ✏️" />
       </div>
       <div class="prof-row">
         <label>Mikrofon</label>
@@ -206,6 +224,7 @@
       <div class="user-tag" id="um-tag"></div>
       <div class="user-role" id="um-role"></div>
       <div class="user-status" id="um-status"></div>
+      <div class="user-status-text"></div>
       <div class="modal-btns">
         <button id="um-dm" class="primary-btn">Mesaj Gönder</button>
         <button id="um-mute" class="secondary-btn hidden">Sustur</button>
@@ -227,6 +246,12 @@
 
   <div id="react-pop" class="hidden"></div>
   <div id="search-panel" class="hidden"></div>
+
+  <!-- Ses seviyesi pop-up'ı -->
+  <div id="vol-pop" class="hidden">
+    <div class="vp-head"><span>Kullanıcı sesi</span><span class="vp-val">100%</span></div>
+    <input type="range" min="0" max="100" value="100" />
+  </div>
 
   <div id="menu-overlay" class="hidden"></div>
   <div id="screen-lightbox" class="hidden">

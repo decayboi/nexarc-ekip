@@ -17,7 +17,7 @@ const ICE = {
   ],
 };
 
-const COLORS = ['#ff725e', '#5865f2', '#3ba55d', '#faa61a', '#eb459e', '#00b0f4', '#9b59b6', '#23a55a'];
+const COLORS = ['#ff725e', '#5865f2', '#3ba55d', '#faa61a', '#eb459e', '#00b0f4', '#9b59b6', '#23a55a', '#e91e63', '#673ab7', '#00bcd4', '#8bc34a', '#ff9800', '#795548', '#607d8b', '#f44336'];
 
 /* --- Tema: Açık / Koyu / Siyah --- */
 const THEMES = ['acik', 'koyu', 'siyah'];
@@ -46,6 +46,13 @@ initTheme();
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const initials = (name) => name.trim().split(/\s+/).map((w) => w[0] || '').join('').slice(0, 2).toUpperCase();
 const avatarOf = (u) => (u && u.avatar ? u.avatar : initials((u && u.name) || '?'));
+const isPhotoAvatar = (av) => typeof av === 'string' && (av.startsWith('/uploads/') || av.startsWith('http'));
+/* Avatar içeriği: fotoğraf ise <img>, değilse emoji/harfler */
+function avatarHtml(u) {
+  const av = u && u.avatar;
+  if (isPhotoAvatar(av)) return `<img class="avatar-img" src="${esc(av)}" alt="" />`;
+  return esc(avatarOf(u));
+}
 const fmtTime = (ts) => new Date(ts).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
 /* --- İkonlar (satır içi SVG) --- */
@@ -62,6 +69,7 @@ const ICON = {
   pin: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M5 17h14M7 17l1.5-9h7L17 17M9 8V4h6v4"/></svg>',
   cam: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7 16 12l7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>',
   leave: '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8 10a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.7 2z" fill="currentColor"/></svg>',
+  dm: '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.48 2 2 6.02 2 10.97c0 2.88 1.53 5.43 3.92 7.1L5 22l4.26-2.19c.86.2 1.78.31 2.74.31 5.52 0 10-4.02 10-9.15S17.52 2 12 2zm-4.3 9.1a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6zm4.3 0a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6zm4.3 0a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6z"/></svg>',
 };
 
 /* --- Durum --- */
@@ -247,9 +255,20 @@ buildColorPicker('#guest-color-picker');
 switchAuthTab('login');
 
 /* --- Profil penceresi --- */
+function profPreview() {
+  const el = $('#prof-avatar-preview');
+  if (!el) return;
+  if (isPhotoAvatar(chosenAvatar)) {
+    el.innerHTML = `<img class="avatar-img" src="${esc(chosenAvatar)}" alt="" />`;
+  } else {
+    el.innerHTML = esc(chosenAvatar || initials((state.self && state.self.name) || '?'));
+  }
+}
 function openProfile() {
   if (!state.self) return;
   $('#prof-display').value = state.self.name || '';
+  $('#prof-status-text').value = state.self.statusText || '';
+  chosenAvatar = state.self.avatar || '';
   const isAccount = !!(state.self.username);
   $('#prof-logout').classList.toggle('hidden', !isAccount);
   $('#prof-note').textContent = isAccount
@@ -258,8 +277,9 @@ function openProfile() {
   const stSel = $('#prof-status');
   if (stSel) stSel.value = state.self.status || 'online';
   buildColorPicker('#prof-color-picker');
-  buildAvatarPicker('#prof-avatar-pick');
   populateDevices();
+  profPreview();
+  $('#prof-emoji-wrap').classList.add('hidden');
   $('#profile-modal').classList.remove('hidden');
 }
 function closeProfile() { $('#profile-modal').classList.add('hidden'); }
@@ -270,11 +290,51 @@ $('#profile-modal').addEventListener('click', (e) => { if (e.target === $('#prof
 const profDeviceSel = $('#prof-device');
 if (profDeviceSel) profDeviceSel.onchange = () => setPreferredMic(profDeviceSel.value);
 
+/* --- Profil fotoğrafı yükleme --- */
+const profPhotoInput = $('#prof-photo-input');
+if (profPhotoInput) {
+  $('#prof-photo-btn').onclick = () => profPhotoInput.click();
+  $('#prof-emoji-btn').onclick = () => {
+    $('#prof-emoji-wrap').classList.toggle('hidden');
+    if (!$('#prof-emoji-wrap').children.length) {
+      const picker = $('#prof-emoji-wrap');
+      picker.innerHTML = '';
+      AVATARS.forEach((a) => {
+        const s = document.createElement('span');
+        s.className = 'avatar-opt' + (a === chosenAvatar ? ' sel' : '');
+        s.textContent = a;
+        s.onclick = () => { chosenAvatar = a; profPreview(); $('#prof-emoji-wrap').classList.add('hidden'); };
+        picker.appendChild(s);
+      });
+    }
+  };
+  $('#prof-photo-clear').onclick = () => { chosenAvatar = ''; profPreview(); };
+  profPhotoInput.onchange = async () => {
+    const file = profPhotoInput.files[0];
+    profPhotoInput.value = '';
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { toast('Fotoğraf 5 MB sınırını aşıyor'); return; }
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const resp = await fetch('/upload', { method: 'POST', body: fd });
+      if (!resp.ok) throw new Error('sunucu hatası');
+      const data = await resp.json();
+      chosenAvatar = data.url;
+      profPreview();
+      toast('Fotoğraf yüklendi — Kaydet\'e bas');
+    } catch (e) {
+      toast('Fotoğraf yüklenemedi');
+    }
+  };
+}
+
 $('#prof-save').onclick = () => {
   const displayName = $('#prof-display').value.trim();
   if (!displayName) { toast('Görünen ad boş olamaz'); return; }
   const status = $('#prof-status') ? $('#prof-status').value : 'online';
-  socket.emit('update-profile', { displayName, color: chosenColor, avatar: chosenAvatar, status }, (res) => {
+  const statusText = $('#prof-status-text') ? $('#prof-status-text').value : '';
+  socket.emit('update-profile', { displayName, color: chosenColor, avatar: chosenAvatar, status, statusText }, (res) => {
     if (res && res.ok) {
       state.self = { ...state.self, ...res.user };
       toast('Profil güncellendi');
@@ -538,11 +598,15 @@ function renderChannels() {
   for (const ch of state.channels) {
     const del = `<button class="channel-del" title="'${esc(ch.name)}' kanalını sil">✕</button>`;
     if (ch.type === 'text') {
+      const isDm = !!ch.dm;
       const el = document.createElement('button');
-      el.className = 'channel' + (state.textChannel === ch.id ? ' active' : '');
-      el.innerHTML = `${ICON.hash}<span class="ch-name">${esc(ch.name)}</span>${del}`;
+      el.className = 'channel' + (isDm ? ' dm' : '') + (state.textChannel === ch.id ? ' active' : '');
+      el.innerHTML = `${isDm ? ICON.dm : ICON.hash}<span class="ch-name">${esc(ch.name)}</span>`;
       el.onclick = () => selectTextChannel(ch.id);
-      el.querySelector('.channel-del').onclick = (e) => { e.stopPropagation(); confirmDeleteChannel(ch); };
+      if (!isDm) {
+        el.innerHTML = `${ICON.hash}<span class="ch-name">${esc(ch.name)}</span>${del}`;
+        el.querySelector('.channel-del').onclick = (e) => { e.stopPropagation(); confirmDeleteChannel(ch); };
+      }
       texts.appendChild(el);
     } else {
       const el = document.createElement('button');
@@ -609,10 +673,10 @@ function renderMembers() {
     const statusDot = { online: '🟢', idle: '🟡', dnd: '🔴' }[u.status] || '🟢';
     const roleBadge = u.role === 'admin' ? ' <span title="Admin" style="font-size:11px">🛡</span>' : '';
     el.innerHTML = `
-      <span class="avatar" style="background:${esc(u.color)}">${esc(avatarOf(u))}<span class="presence" style="background:${u.status === 'online' ? 'var(--green)' : (u.status === 'idle' ? '#faa61a' : '#f23f43')}"></span></span>
+      <span class="avatar" style="background:${esc(u.color)}">${avatarHtml(u)}<span class="presence" style="background:${u.status === 'online' ? 'var(--green)' : (u.status === 'idle' ? '#faa61a' : '#f23f43')}"></span></span>
       <div class="member-info">
         <div class="member-name">${statusDot} ${esc(u.name)}${roleBadge}${u.id === state.self?.id ? ' <span style="color:var(--muted)">(sen)</span>' : ''}</div>
-        <div class="member-status">${esc(status)}</div>
+        <div class="member-status">${esc(status)}${u.statusText ? ' · ' + esc(u.statusText) : ''}</div>
       </div>
       ${u.sharing ? `<span class="member-icon" title="Ekran paylaşıyor">${ICON.share}</span>` : ''}`;
     el.onclick = () => openUserCard(u.id);
@@ -620,18 +684,67 @@ function renderMembers() {
   }
 }
 
+/* ---- Ses seviyesi pop-up'ı ---- */
+let volPeer = null;
+function openVolPop(e, peerId) {
+  e.stopPropagation();
+  const pop = $('#vol-pop');
+  if (!pop) return;
+  // Aynı kullanıcıya tekrar basılırsa kapat
+  if (pop.dataset.peer === peerId && !pop.classList.contains('hidden')) {
+    closeVolPop();
+    return;
+  }
+  volPeer = peerId;
+  const r = e.currentTarget.getBoundingClientRect();
+  pop.style.left = Math.min(r.left, window.innerWidth - 200) + 'px';
+  pop.style.top = (r.bottom + 6) + 'px';
+  const slider = pop.querySelector('input');
+  const a = state.audioEls.get(peerId);
+  const cur = a ? Math.round(a.volume * 100) : 100;
+  slider.value = cur;
+  pop.querySelector('.vp-val').textContent = cur + '%';
+  pop.dataset.peer = peerId;
+  pop.classList.remove('hidden');
+}
+function closeVolPop() {
+  const pop = $('#vol-pop');
+  if (!pop) return;
+  pop.classList.add('hidden');
+  pop.dataset.peer = '';
+  volPeer = null;
+}
+const volSlider = document.querySelector('#vol-pop input');
+if (volSlider) {
+  volSlider.addEventListener('input', (e) => {
+    const v = e.target.value / 100;
+    const a = state.audioEls.get(volPeer);
+    if (a) a.volume = v;
+    const lbl = document.querySelector('#vol-pop .vp-val');
+    if (lbl) lbl.textContent = Math.round(v * 100) + '%';
+  });
+}
+document.addEventListener('click', (e) => {
+  const pop = $('#vol-pop');
+  if (!pop || pop.classList.contains('hidden')) return;
+  if (!pop.contains(e.target) && !e.target.closest('.vol-btn')) closeVolPop();
+});
+
 /* ---- Kullanıcı kartı ---- */
 let umUserId = null;
 function openUserCard(userId) {
   const u = state.users.get(userId);
   if (!u) return;
   umUserId = userId;
-  $('#um-avatar').textContent = avatarOf(u);
+  $('#um-avatar').innerHTML = avatarHtml(u);
   $('#um-avatar').style.background = u.color;
   $('#um-name').textContent = u.name;
   $('#um-tag').textContent = u.username ? '@' + u.username : 'Misafir';
   $('#um-role').innerHTML = u.role === 'admin' ? '🛡 Admin' : 'Üye';
   $('#um-status').textContent = { online: '🟢 Çevrimiçi', idle: '🟡 Boşta', dnd: '🔴 Rahatsız etmeyin' }[u.status] || '🟢 Çevrimiçi';
+  const umSt = document.querySelector('.user-status-text');
+  if (umSt) umSt.textContent = u.statusText || '';
+  $('#um-status').style.display = 'block';
   const inSameVoice = state.voiceChannel && u.voiceChannel === state.voiceChannel && userId !== state.self?.id;
   const muteBtn = $('#um-mute');
   if (inSameVoice) {
@@ -713,7 +826,7 @@ function appendMessage(msg, scroll) {
       ${isOwn ? `<button class="ma-btn ma-del danger" title="Sil">${ICON.leave === '' ? '' : ''}🗑</button>` : ''}
     </div>`;
   el.innerHTML = `
-    <span class="avatar" style="background:${esc(msg.user.color)}">${esc(avatarOf(msg.user))}</span>
+    <span class="avatar" style="background:${esc(msg.user.color)}">${avatarHtml(msg.user)}</span>
     <div class="msg-body">
       ${replyHtml}
       <div class="msg-head"><span class="msg-name">${esc(msg.user.name)}</span><span class="msg-time">${fmtTime(msg.ts)}${edited}</span></div>
@@ -1041,6 +1154,8 @@ function renderVoiceGrid() {
   const members = [...state.users.values()].filter((u) => u.voiceChannel === state.voiceChannel);
   for (const u of members) {
     const isSelf = u.id === state.self?.id;
+    // Kamera açıkken kendi profil kartını gizle — sadece kamera görünsün
+    if (isSelf && state.cameraOn) continue;
     const el = document.createElement('div');
     el.className = 'voice-card' + (isSelf ? ' self' : '') + (state.speaking.has(u.id) ? ' speaking' : '');
     el.dataset.peer = u.id;
@@ -1052,19 +1167,16 @@ function renderVoiceGrid() {
     if (u.sharing) statusText = '<span class="badge-share">Ekran Paylaşılıyor</span>';
     if (u.camera) statusText += ' ' + (statusText.startsWith('<') ? '' : '') + '<span class="badge-share">📷</span>';
     const vol = !isSelf
-      ? `<div class="vol-row"><span class="vol-icon">🔊</span><input type="range" min="0" max="200" value="100" data-vol-peer="${esc(u.id)}" /></div>`
+      ? `<button class="vol-btn" data-vol="${esc(u.id)}" title="Ses seviyesi">🔊</button>`
       : '';
     el.innerHTML = `
-      <span class="avatar" style="background:${esc(u.color)}">${esc(avatarOf(u))}${muteBadge}</span>
+      <span class="avatar" style="background:${esc(u.color)}">${avatarHtml(u)}${muteBadge}</span>
       <div class="vcard-name">${esc(u.name)}${isSelf ? ' <span style="color:var(--muted)">(sen)</span>' : ''} ${serverMuted}</div>
       <div class="vcard-status">${statusText}</div>
       ${vol}`;
     if (!isSelf) {
-      const sl = el.querySelector('input[data-vol-peer]');
-      if (sl) sl.oninput = () => {
-        const a = state.audioEls.get(u.id);
-        if (a) a.volume = sl.value / 100;
-      };
+      const vb = el.querySelector('.vol-btn');
+      if (vb) vb.onclick = (e) => openVolPop(e, u.id);
     }
     grid.appendChild(el);
   }

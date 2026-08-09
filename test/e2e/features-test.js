@@ -213,10 +213,14 @@ const URL = 'http://localhost:3000';
   });
   log('10. Susturma: B, A\'yı susturdu (badge: ' + mutedSeen + ')');
 
-  // 11) Ses seviyesi kaydırıcısı
-  const volSeen = await b.evaluate(() => !!document.querySelector('.vol-row input[type="range"]'));
-  if (!volSeen) { log('✗ Ses seviyesi kaydırıcısı yok'); process.exit(1); }
-  log('11. Ses seviyesi: her kullanıcı için kaydırıcı var');
+  // 11) Ses seviyesi: ikon + pop-up
+  const volBtnSeen = await b.evaluate(() => !!document.querySelector('.vol-btn'));
+  if (!volBtnSeen) { log('✗ Ses seviyesi ikonu yok'); process.exit(1); }
+  await b.evaluate(() => document.querySelector('.vol-btn').click());
+  await wait(400);
+  const volPopSeen = await b.evaluate(() => !document.querySelector('#vol-pop').classList.contains('hidden'));
+  if (!volPopSeen) { log('✗ Ses seviyesi pop-up açılmadı'); process.exit(1); }
+  log('11. Ses seviyesi: 🔊 ikonu → pop-up açılıyor');
 
   await browser.close();
   log('\nSONUÇ: v3.0 ÖZELLİK TESTLERİ GEÇTİ ✔');
