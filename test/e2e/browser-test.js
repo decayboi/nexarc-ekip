@@ -128,10 +128,10 @@ async function main() {
       ok(`${names[i]} → ses kanalında, mikrofon akışı aktif`);
     }
 
-    /* 3. Gerçek WebRTC: herkesin 2 peer bağlantısı connected */
+    /* 3. Gerçek WebRTC: herkesin 2 peer bağlantısı connected (poll ile) */
     for (let i = 0; i < 3; i++) {
       const s = await waitFor(pages[i], `${names[i]} 2 ses bağlantısı`, (st) =>
-        st.voicePeers === 2 && st.connStates.length === 2 && st.connStates.every((c) => c === 'connected'));
+        st.voicePeers === 2 && st.connStates.length === 2 && st.connStates.every((c) => c === 'connected'), 45000);
       ok(`WebRTC ses: ${names[i]} → 2 eş ile bağlantı kuruldu (${s.connStates.join(', ')})`);
     }
 

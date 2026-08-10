@@ -55,6 +55,33 @@ function avatarHtml(u) {
 }
 const fmtTime = (ts) => new Date(ts).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
+/* --- Ses efektleri (Web Audio) --- */
+let soundOn = true;
+try { soundOn = (localStorage.getItem('nexarc-sound') || '1') === '1'; } catch (e) {}
+let sndCtx = null;
+function playTone(freq, dur, vol, when = 0, type = 'sine') {
+  if (!soundOn) return;
+  try {
+    sndCtx = sndCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const t = sndCtx.currentTime + when;
+    const o = sndCtx.createOscillator();
+    const g = sndCtx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(sndCtx.destination);
+    o.start(t); o.stop(t + dur + 0.05);
+  } catch (e) {}
+}
+const SFX = {
+  msgIn: () => playTone(660, 0.09, 0.12),
+  msgOut: () => playTone(520, 0.05, 0.08),
+  join: () => { playTone(523, 0.1, 0.1); playTone(784, 0.12, 0.1, 0.09); },
+  leave: () => { playTone(784, 0.1, 0.1); playTone(523, 0.12, 0.1, 0.09); },
+  mention: () => { playTone(880, 0.12, 0.14); playTone(1174, 0.18, 0.14, 0.12); },
+};
+
 /* --- Markdown formatlama (Discord benzeri) --- */
 function formatMd(text) {
   let t = esc(text);
@@ -309,6 +336,17 @@ buildAvatarPicker('#reg-avatar-pick');
 buildColorPicker('#guest-color-picker');
 switchAuthTab('login');
 
+/* --- Ses efekti ayarı --- */
+const profSound = $('#prof-sound');
+if (profSound) {
+  profSound.checked = soundOn;
+  profSound.onchange = () => {
+    soundOn = profSound.checked;
+    try { localStorage.setItem('nexarc-sound', soundOn ? '1' : '0'); } catch (e) {}
+    if (soundOn) SFX.msgIn();
+  };
+}
+
 /* --- Profil penceresi --- */
 function profPreview() {
   const el = $('#prof-avatar-preview');
@@ -323,6 +361,8 @@ function openProfile() {
   if (!state.self) return;
   $('#prof-display').value = state.self.name || '';
   $('#prof-status-text').value = state.self.statusText || '';
+  const ab = $('#prof-about');
+  if (ab) ab.value = state.self.aboutMe || '';
   chosenAvatar = state.self.avatar || '';
   const isAccount = !!(state.self.username);
   $('#prof-logout').classList.toggle('hidden', !isAccount);
@@ -389,7 +429,8 @@ $('#prof-save').onclick = () => {
   if (!displayName) { toast('Görünen ad boş olamaz'); return; }
   const status = $('#prof-status') ? $('#prof-status').value : 'online';
   const statusText = $('#prof-status-text') ? $('#prof-status-text').value : '';
-  socket.emit('update-profile', { displayName, color: chosenColor, avatar: chosenAvatar, status, statusText }, (res) => {
+  const aboutMe = $('#prof-about') ? $('#prof-about').value : '';
+  socket.emit('update-profile', { displayName, color: chosenColor, avatar: chosenAvatar, status, statusText, aboutMe }, (res) => {
     if (res && res.ok) {
       state.self = { ...state.self, ...res.user };
       toast('Profil güncellendi');
@@ -474,8 +515,9 @@ socket.on('state', ({ users }) => {
   if (state.voiceChannel) renderVoiceGrid();
 });
 
-socket.on('user-joined', ({ user }) => toast(`${user.name} sunucuya katıldı`));
+socket.on('user-joined', ({ user }) => { toast(`${user.name} sunucuya katıldı`); SFX.join(); });
 socket.on('user-left', ({ userId }) => {
+  SFX.leave();
   state.users.delete(userId);
   removePeer(userId);
   if (state.voiceChannel) renderVoiceGrid();
@@ -492,8 +534,10 @@ socket.on('chat-history', ({ channelId, messages }) => {
 socket.on('chat', (msg) => {
   if (msg.channelId === state.textChannel) {
     appendMessage(msg);
+    if (msg.user.id !== state.self?.id) SFX.msgIn();
     return;
   }
+  SFX.msgIn();
   // Okunmamış sayaç
   const n = (state.unread.get(msg.channelId) || 0) + 1;
   state.unread.set(msg.channelId, n);
@@ -504,6 +548,7 @@ socket.on('chat', (msg) => {
 
 /* --- @bahsetme bildirimi --- */
 socket.on('mention', ({ channelId, from, text, channelName }) => {
+  SFX.mention();
   toast(`🔔 ${from} seni etiketledi (${channelName})`);
   notify(`🔔 ${from} seni etiketledi`, text);
   // Etiketlenen kanalda rozet göster
@@ -550,12 +595,30 @@ socket.on('voice-joined', async ({ channelId, occupants }) => {
   updateMicUI();
   updateCamUI();
   for (const occ of occupants) connectVoicePeer(occ);
+  // Mikrofon hazır olduğuna göre, track'siz kurulan PC'lere ses track'ini ekle
+  // (getUserMedia'dan önce kurulmuşlarsa negotiationneeded tetiklenmemiş olabilir)
+  if (state.localStream) ensureVoiceTracks();
   showVoiceView();
   renderChannels();
   renderMembers();
   startSpeakingLoop();
   toast('Ses kanalına katıldın');
 });
+
+/* Track'siz ses PC'lerine mikrofon track'ini ekle + yeniden müzakere */
+function ensureVoiceTracks() {
+  if (!state.localStream) return;
+  const audioTrack = state.localStream.getAudioTracks()[0];
+  if (!audioTrack) return;
+  for (const [peerId, meta] of state.voicePCs) {
+    const hasAudioSender = meta.pc.getSenders().some((s) => s.track && s.track.kind === 'audio');
+    if (!hasAudioSender) {
+      try {
+        meta.pc.addTrack(audioTrack, state.localStream); // negotiationneeded'ı tetikler
+      } catch (e) {}
+    }
+  }
+}
 
 socket.on('voice-user-joined', ({ user }) => {
   if (state.voiceChannel === user.voiceChannel) connectVoicePeer(user);
@@ -638,6 +701,25 @@ socket.on('message-reacted', ({ channelId, messageId, reactions }) => {
     r.onclick = () => socket.emit('message-reaction', { channelId, messageId, emoji });
     box.appendChild(r);
   }
+});
+
+/* --- Anket oyları güncellendi --- */
+socket.on('poll-updated', ({ channelId, messageId, votes }) => {
+  const el = document.querySelector(`.msg[data-mid="${messageId}"]`);
+  if (!el) return;
+  const total = Object.values(votes || {}).reduce((a, b) => a + b.length, 0);
+  el.querySelectorAll('.poll-opt').forEach((optEl) => {
+    const idx = Number(optEl.dataset.opt);
+    const voters = (votes && votes[idx]) || [];
+    const cnt = voters.length;
+    const pct = total ? Math.round((cnt / total) * 100) : 0;
+    const mine = voters.includes(state.self?.id);
+    optEl.classList.toggle('voted', mine);
+    optEl.querySelector('.poll-opt-bar').style.width = pct + '%';
+    optEl.querySelector('.poll-opt-cnt').textContent = cnt + ' (' + pct + '%)';
+  });
+  const t = el.querySelector('.poll-total');
+  if (t) t.textContent = total + ' oy';
 });
 
 /* --- Mesaj pinlendi --- */
@@ -991,6 +1073,8 @@ function openUserCard(userId, anchorEl) {
   $('#um-status').textContent = { online: '🟢 Çevrimiçi', idle: '🟡 Boşta', dnd: '🔴 Rahatsız etmeyin' }[u.status] || '🟢 Çevrimiçi';
   const umSt = document.querySelector('.user-status-text');
   if (umSt) umSt.textContent = u.statusText || '';
+  const umAb = document.querySelector('.user-about');
+  if (umAb) umAb.textContent = u.aboutMe || '';
   $('#um-status').style.display = 'block';
   const inSameVoice = state.voiceChannel && u.voiceChannel === state.voiceChannel && userId !== state.self?.id;
   const muteBtn = $('#um-mute');
@@ -1118,6 +1202,7 @@ function appendMessage(msg, scroll) {
       <div class="msg-text">${formatMd(msg.text || '')}</div>
       ${mediaHtml(msg.media)}
       ${embedHtml(msg.text)}
+      ${pollHtml(msg)}
     </div>
     ${actions}`;
   // Aksiyonlar
@@ -1135,6 +1220,13 @@ function appendMessage(msg, scroll) {
       if (!res || !res.ok) toast((res && res.error) || 'Mesaj silinemedi');
     });
   };
+  // Anket oyu
+  el.querySelectorAll('.poll-opt').forEach((optEl) => {
+    optEl.onclick = () => {
+      const idx = Number(optEl.dataset.opt);
+      socket.emit('poll-vote', { channelId: msg.channelId, messageId: msg.id, optionIndex: idx });
+    };
+  });
   // Sağ tık menüsü
   el.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -1172,6 +1264,7 @@ $('#chat-form').addEventListener('submit', (e) => {
   if (!text || !state.textChannel) return;
   const replyTo = state.pendingReply ? { id: state.pendingReply.id } : null;
   socket.emit('chat', { channelId: state.textChannel, text, replyTo });
+  SFX.msgOut();
   input.value = '';
   setPendingReply(null);
   input.focus();
@@ -1356,6 +1449,117 @@ document.addEventListener('keydown', (e) => {
     input.focus();
     input.select();
   }
+});
+
+/* --- Anket (poll) --- */
+function openPollModal() {
+  if (!state.textChannel) { toast('Önce bir kanal seç'); return; }
+  $('#poll-q').value = '';
+  $('#poll-opts').innerHTML = '';
+  addPollOpt(); addPollOpt();
+  $('#poll-modal').classList.remove('hidden');
+}
+function closePollModal() { $('#poll-modal').classList.add('hidden'); }
+function addPollOpt() {
+  const wrap = $('#poll-opts');
+  if (wrap.querySelectorAll('input').length >= 6) { toast('En fazla 6 seçenek'); return; }
+  const row = document.createElement('div');
+  row.className = 'poll-opt-row';
+  row.innerHTML = '<input class="auth-input poll-opt" maxlength="60" placeholder="Seçenek" />';
+  wrap.appendChild(row);
+  row.querySelector('input').focus();
+}
+function submitPoll() {
+  const q = $('#poll-q').value.trim();
+  const opts = [...document.querySelectorAll('#poll-opts .poll-opt')].map((i) => i.value.trim()).filter(Boolean);
+  if (!q) { toast('Anket sorusu yaz'); return; }
+  if (opts.length < 2) { toast('En az 2 seçenek gerekli'); return; }
+  socket.emit('poll-create', { channelId: state.textChannel, question: q, options: opts }, (res) => {
+    if (!res || !res.ok) toast((res && res.error) || 'Anket oluşturulamadı');
+    else { toast('📊 Anket oluşturuldu'); closePollModal(); }
+  });
+}
+const pollBtn = $('#poll-btn');
+if (pollBtn) pollBtn.onclick = (e) => { e.preventDefault(); openPollModal(); };
+const pollAddOpt = $('#poll-add-opt');
+if (pollAddOpt) pollAddOpt.onclick = addPollOpt;
+const pollCreateBtn = $('#poll-create');
+if (pollCreateBtn) pollCreateBtn.onclick = submitPoll;
+const pollCloseBtn = $('#poll-close');
+if (pollCloseBtn) pollCloseBtn.onclick = closePollModal;
+$('#poll-modal').addEventListener('click', (e) => { if (e.target === $('#poll-modal')) closePollModal(); });
+$('#poll-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPoll(); });
+
+/* Anket render (mesaj içinde) */
+function pollHtml(msg) {
+  const p = msg.poll;
+  if (!p) return '';
+  const total = Object.values(p.votes || {}).reduce((a, b) => a + b.length, 0);
+  let rows = '';
+  p.options.forEach((opt, idx) => {
+    const voters = (p.votes && p.votes[idx]) || [];
+    const cnt = voters.length;
+    const pct = total ? Math.round((cnt / total) * 100) : 0;
+    const mine = voters.includes(state.self?.id);
+    rows += `
+      <div class="poll-opt ${mine ? 'voted' : ''}" data-opt="${idx}">
+        <div class="poll-opt-bar" style="width:${pct}%"></div>
+        <span class="poll-opt-label">${esc(opt)}</span>
+        <span class="poll-opt-cnt">${cnt} (${pct}%)</span>
+      </div>`;
+  });
+  return `<div class="poll-box" data-poll="${msg.id}">
+    <div class="poll-q">📊 ${esc(p.q)}</div>
+    <div class="poll-opts">${rows}</div>
+    <div class="poll-total">${total} oy</div>
+  </div>`;
+}
+
+/* --- GIF seçici --- */
+const GIF_CATALOG = [
+  { n: 'kutlama', u: '/gifs/kutlama.gif' },
+  { n: 'kalp', u: '/gifs/kalp.gif' },
+  { n: 'alkis', u: '/gifs/alkis.gif' },
+  { n: 'gulen', u: '/gifs/gulen.gif' },
+  { n: 'sasirdim', u: '/gifs/sasirdim.gif' },
+  { n: 'takip', u: '/gifs/takip.gif' },
+  { n: 'dans', u: '/gifs/dans.gif' },
+  { n: 'coz', u: '/gifs/coz.gif' },
+];
+function renderGifPanel(filter) {
+  const box = $('#gif-grid');
+  if (!box) return;
+  box.innerHTML = '';
+  const q = (filter || '').toLowerCase();
+  GIF_CATALOG.filter((g) => !q || g.n.includes(q)).forEach((g) => {
+    const b = document.createElement('button');
+    b.className = 'gif-item';
+    b.title = g.n;
+    b.innerHTML = `<img src="${g.u}" alt="${g.n}" loading="lazy"/>`;
+    b.onclick = () => sendGif(g);
+    box.appendChild(b);
+  });
+  if (!box.children.length) box.innerHTML = '<div class="gif-empty">GIF bulunamadı</div>';
+}
+function openGifPanel() {
+  renderGifPanel('');
+  $('#gif-panel').classList.toggle('hidden');
+  if (!$('#gif-panel').classList.contains('hidden')) $('#gif-search').focus();
+}
+function sendGif(g) {
+  if (!state.textChannel) { toast('Önce bir kanal seç'); return; }
+  socket.emit('chat', { channelId: state.textChannel, text: '', media: { url: g.u, name: 'GIF: ' + g.n, size: 0, type: 'image/gif' } });
+  $('#gif-panel').classList.add('hidden');
+  SFX.msgOut();
+}
+const gifBtn = $('#gif-btn');
+if (gifBtn) gifBtn.onclick = (e) => { e.preventDefault(); openGifPanel(); };
+const gifSearch = $('#gif-search');
+if (gifSearch) gifSearch.addEventListener('input', () => renderGifPanel(gifSearch.value));
+document.addEventListener('click', (e) => {
+  const panel = $('#gif-panel');
+  if (!panel || panel.classList.contains('hidden')) return;
+  if (!panel.contains(e.target) && e.target !== gifBtn) panel.classList.add('hidden');
 });
 
 /* --- Tepki popover --- */
@@ -1958,6 +2162,7 @@ function connectVoicePeer(user) {
   if (state.voicePCs.has(user.id)) return;
   const tracks = state.localStream ? state.localStream.getTracks() : [];
   createPC(user.id, 'voice', tracks, 'voice');
+  ensureVoiceTracks();
   // Ben ekran paylaşıyorsam, yeni gelen kişiye ekranı gönder
   if (state.screenStream) {
     if (!state.screenSendPCs.has(user.id)) {

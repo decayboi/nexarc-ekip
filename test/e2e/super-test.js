@@ -8,6 +8,7 @@ const APP = '/home/user/nexarc-app';
 const E2E = path.join(APP, 'test/e2e');
 const TESTS = [
   'v39-check.js',         // ptt/kick/ayraç — accounts BOŞKEN koşmalı (admin)
+  'v40-check.js',         // ses/anket/gif/about/pwa/kamera
   'browser-test.js',      // masaüstü
   'mobile-test.js',       // mobil
   'media-test.js',        // medya
@@ -22,7 +23,7 @@ const TESTS = [
   'v37-check.js',         // mention/markdown
   'v38-check.js',         // ses geçişi
 ];
-const ROUNDS = 5;
+const ROUNDS = Number(process.env.ROUNDS || 5);
 
 function run(cmd, opts = {}) {
   return execSync(cmd, { cwd: opts.cwd || APP, stdio: ['ignore', 'pipe', 'pipe'], timeout: opts.timeout || 60000, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, ...opts });

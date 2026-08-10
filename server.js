@@ -93,6 +93,7 @@ function sanitizeAccount(username) {
 const sanitize = (u) => ({
   id: u.id, name: u.name, color: u.color, avatar: u.avatar || '', username: u.username || null,
   role: u.role || 'member', status: u.status || 'online', statusText: u.statusText || '',
+  aboutMe: u.aboutMe || '',
   voiceChannel: u.voiceChannel, sharing: !!u.sharing, camera: !!u.camera, muted: !!u.muted,
 });
 const statePayload = () => ({ users: [...users.values()].map(sanitize) });
@@ -177,6 +178,7 @@ io.on('connection', (socket) => {
       role: account ? account.role : 'member',
       status: account ? account.status : 'online',
       statusText: account ? (account.statusText || '') : '',
+      aboutMe: account ? (account.aboutMe || '') : '',
       voiceChannel: null, sharing: false, camera: false, muted: false,
     };
     users.set(socket.id, user);
@@ -187,7 +189,7 @@ io.on('connection', (socket) => {
   });
 
   /* ---- Profil / durum ---- */
-  socket.on('update-profile', ({ displayName, color, avatar, status, statusText }, cb) => {
+  socket.on('update-profile', ({ displayName, color, avatar, status, statusText, aboutMe }, cb) => {
     const user = users.get(socket.id);
     if (!user) return cb && cb({ ok: false, error: 'Oturum yok' });
     const disp = String(displayName || '').trim();
@@ -199,6 +201,7 @@ io.on('connection', (socket) => {
     user.avatar = (av.startsWith('/uploads/') || av.length <= 8) ? av : '';
     if (['online', 'idle', 'dnd'].includes(status)) user.status = status;
     user.statusText = String(statusText || '').trim().slice(0, 60);
+    user.aboutMe = String(aboutMe || '').trim().slice(0, 160);
     const accName = socketAccounts.get(socket.id);
     if (accName && accounts[accName]) {
       accounts[accName].displayName = user.name;
@@ -206,6 +209,7 @@ io.on('connection', (socket) => {
       accounts[accName].avatar = user.avatar;
       accounts[accName].status = user.status;
       accounts[accName].statusText = user.statusText;
+      accounts[accName].aboutMe = user.aboutMe;
       saveAccounts();
     }
     io.emit('state', statePayload());
@@ -258,7 +262,9 @@ io.on('connection', (socket) => {
     if (!user || !isChatAllowed(channelId, user)) return;
     const msgText = String(text || '').slice(0, 2000);
     let msgMedia = null;
-    if (media && typeof media.url === 'string' && media.url.startsWith('/uploads/')) {
+    const mediaOk = media && typeof media.url === 'string' &&
+      (media.url.startsWith('/uploads/') || media.url.startsWith('/gifs/') || media.url.startsWith('https://media.'));
+    if (mediaOk) {
       msgMedia = { url: media.url.slice(0, 300), name: String(media.name || 'dosya').slice(0, 200), size: Number(media.size) || 0, type: String(media.type || '').slice(0, 100) };
     }
     if (!msgText.trim() && !msgMedia) return;
@@ -300,6 +306,42 @@ io.on('connection', (socket) => {
     arr.splice(idx, 1);
     io.to('ch:' + channelId).emit('message-deleted', { channelId, messageId });
     cb && cb({ ok: true });
+  });
+
+  /* ---- Anket (poll) ---- */
+  socket.on('poll-create', ({ channelId, question, options }, cb) => {
+    const user = users.get(socket.id);
+    if (!user || !isChatAllowed(channelId, user)) return cb && cb({ ok: false, error: 'Kanal yok' });
+    const q = String(question || '').trim().slice(0, 120);
+    const opts = (Array.isArray(options) ? options : []).map((o) => String(o || '').trim().slice(0, 60)).filter(Boolean).slice(0, 6);
+    if (!q || opts.length < 2) return cb && cb({ ok: false, error: 'Soru ve en az 2 seçenek gerekli' });
+    const msg = {
+      id: socket.id + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      channelId, user: sanitize(user), text: '', media: null, replyTo: null,
+      reactions: {}, pinned: false, edited: false, ts: Date.now(),
+      poll: { q, options: opts, votes: {} },
+    };
+    pushChat(channelId, msg);
+    io.to('ch:' + channelId).emit('chat', msg);
+    cb && cb({ ok: true, messageId: msg.id });
+  });
+
+  /* ---- Anket oyu (toggle) ---- */
+  socket.on('poll-vote', ({ channelId, messageId, optionIndex }, cb) => {
+    const user = users.get(socket.id);
+    const arr = chatHistory.get(String(channelId || ''));
+    if (!user || !arr) return cb && cb({ ok: false });
+    const m = arr.find((x) => x.id === messageId);
+    if (!m || !m.poll) return cb && cb({ ok: false });
+    const idx = Number(optionIndex);
+    if (isNaN(idx) || idx < 0 || idx >= m.poll.options.length) return cb && cb({ ok: false });
+    m.poll.votes = m.poll.votes || {};
+    const list = m.poll.votes[idx] || [];
+    const i = list.indexOf(user.id);
+    if (i >= 0) list.splice(i, 1); else list.push(user.id);
+    if (!list.length) delete m.poll.votes[idx]; else m.poll.votes[idx] = list;
+    io.to('ch:' + channelId).emit('poll-updated', { channelId, messageId, votes: m.poll.votes });
+    cb && cb({ ok: true, votes: m.poll.votes });
   });
 
   socket.on('message-update', ({ channelId, messageId, text }, cb) => {

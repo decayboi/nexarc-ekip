@@ -500,21 +500,33 @@ body[data-theme="acik"] .top-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.12)
 
 /* --- Kamera kartları --- */
 .cam-gallery {
-  display: flex; flex-wrap: wrap; gap: 10px;
-  padding: 4px 0 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  padding: 10px 0 14px;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
 }
 .cam-card {
-  position: relative; border-radius: 12px; overflow: hidden;
+  position: relative; border-radius: 14px; overflow: hidden;
   border: 1px solid var(--line); background: #000;
-  width: 200px; height: 130px; flex-shrink: 0;
+  width: 100%; height: auto;
+  aspect-ratio: 16 / 9;
+  min-height: 150px;
 }
 .cam-card video {
   width: 100%; height: 100%; object-fit: cover; display: block; background: #000;
 }
 .cam-card .cam-name {
-  position: absolute; bottom: 6px; left: 8px; font-size: 11px; font-weight: 600;
-  background: rgba(0,0,0,.6); padding: 3px 8px; border-radius: 999px; color: #fff;
-  max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  position: absolute; bottom: 8px; left: 10px; font-size: 12px; font-weight: 700;
+  background: rgba(0,0,0,.65); padding: 4px 10px; border-radius: 999px; color: #fff;
+  max-width: calc(100% - 20px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: flex; align-items: center; gap: 6px;
+}
+.cam-card .cam-name::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green); flex-shrink: 0;
 }
 
 /* --- Ses kartı: konuşan halkası + ses seviyesi --- */
@@ -919,6 +931,68 @@ body[data-theme="acik"] .top-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.12)
 .ctx-item.danger { color: var(--red); }
 .ctx-item.danger:hover { background: var(--red); color: #fff; }
 .ctx-sep { height: 1px; background: var(--line); margin: 4px 6px; }
+
+/* --- Anket --- */
+.poll-box {
+  margin-top: 8px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--bg3); padding: 12px 14px; max-width: 460px;
+}
+.poll-q { font-weight: 700; font-size: 14px; margin-bottom: 10px; }
+.poll-opt {
+  position: relative; padding: 9px 12px; margin-bottom: 6px;
+  border: 1px solid var(--line); border-radius: 9px; cursor: pointer;
+  overflow: hidden; transition: border-color .15s; font-size: 13.5px;
+  display: flex; align-items: center; gap: 8px;
+}
+.poll-opt:hover { border-color: var(--accent); }
+.poll-opt.voted { border-color: var(--accent); }
+.poll-opt-bar {
+  position: absolute; inset: 0; width: 0%;
+  background: rgba(255, 114, 94, 0.14); transition: width .3s ease;
+}
+.poll-opt-label { position: relative; z-index: 1; flex: 1; }
+.poll-opt-cnt { position: relative; z-index: 1; font-size: 12px; color: var(--muted); font-weight: 600; }
+.poll-total { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+.poll-opt-row { margin-bottom: 8px; }
+.poll-opt-row .auth-input { margin-bottom: 0; }
+
+/* --- GIF paneli --- */
+#gif-btn {
+  width: 42px; height: 42px; border: 1px solid var(--line);
+  background: var(--bg3); color: var(--muted); border-radius: 10px;
+  cursor: pointer; font-size: 17px; display: flex; align-items: center; justify-content: center;
+  transition: border-color .15s, background .15s; flex-shrink: 0;
+}
+#gif-btn:hover { border-color: var(--accent); background: var(--bg4); }
+#gif-panel {
+  position: absolute; bottom: 74px; left: 18px; z-index: 26;
+  width: min(380px, calc(100vw - 36px));
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 14px;
+  padding: 12px; box-shadow: 0 16px 50px rgba(0, 0, 0, 0.5);
+}
+#gif-panel.hidden { display: none; }
+.gif-search {
+  width: 100%; padding: 9px 12px; margin-bottom: 10px;
+  background: var(--bg3); border: 1px solid var(--line); border-radius: 9px;
+  color: var(--text); font-size: 13px; font-family: inherit; outline: none;
+}
+.gif-search:focus { border-color: var(--accent); }
+.gif-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; max-height: 260px; overflow-y: auto; }
+.gif-item {
+  border: none; border-radius: 10px; overflow: hidden; cursor: pointer; padding: 0;
+  background: var(--bg3); transition: transform .12s, border-color .12s; border: 1px solid var(--line);
+}
+.gif-item:hover { transform: scale(1.03); border-color: var(--accent); }
+.gif-item img { width: 100%; height: 90px; object-fit: cover; display: block; }
+.gif-empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+
+/* --- About me --- */
+.user-about {
+  font-size: 13px; color: var(--text); margin-bottom: 14px;
+  background: var(--bg3); border-radius: 8px; padding: 8px 10px;
+  max-width: 100%; word-break: break-word;
+}
+#prof-about { resize: vertical; min-height: 56px; font-family: inherit; }
 
 /* --- Sesli mesaj butonu --- */
 #voicenote-btn {

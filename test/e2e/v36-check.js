@@ -67,8 +67,9 @@ const URL = 'http://localhost:3000';
     return c ? c.offsetWidth + 'x' + c.offsetHeight : 'yok';
   });
   log('2. Kamera kartı boyutu:', camSize);
-  if (!camSize.startsWith('200')) { log('✗ Boyut 200 değil: ' + camSize); process.exit(1); }
-  log('   ✓ Kart 200x130 (büyütüldü)');
+  const w = parseInt(camSize.split('x')[0], 10);
+  if (isNaN(w) || w < 250) { log('✗ Boyut beklenenden küçük: ' + camSize); process.exit(1); }
+  log('   ✓ Kart Discord boyutunda (' + camSize + ')');
 
   // 3) DM'ye geç → LOGOYA tıkla → sunucu kanallarına döner
   await a.evaluate(() => document.querySelector('#dm-nav-btn').click());

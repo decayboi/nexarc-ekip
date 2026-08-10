@@ -52,7 +52,7 @@ const URL = 'http://localhost:3000';
   // B: 1 voice kart (kendi) + 1 kamera kartı (A'nın); A'nın profil kartı yok
   if (bView.voiceCards !== 1) { log('✗ B, A\'nın profil kartını hâlâ görüyor (kartlar=' + bView.voiceCards + ')'); process.exit(1); }
   if (bView.camCards !== 1 || bView.selfCam !== 0) { log('✗ B, A\'nın kamera kartını görmüyor'); process.exit(1); }
-  if (bView.camW > 200 || bView.camH > 140) { log('✗ Kamera kartı hâlâ büyük: ' + bView.camW + 'x' + bView.camH); process.exit(1); }
+  if (bView.camW < 250) { log('✗ Kamera kartı beklenenden küçük: ' + bView.camW + 'x' + bView.camH); process.exit(1); }
   if (!bView.galleryVisible) { log('✗ Galeri görünür değil'); process.exit(1); }
   log('   ✓ B ekranında A\'nın profil kartı yok, küçük kamera kartı var (' + bView.camW + 'x' + bView.camH + ')');
 
