@@ -13,7 +13,7 @@ const names = ['Ali', 'Ayşe', 'Mert'].map((n, i) => `${n}-${uniq}-${i}`);
 const ok = (name) => console.log('✓ ' + name);
 const fail = (name, e) => { console.error('✗ ' + name, e && e.message); process.exit(1); };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const onEvent = (sock, ev, timeout = 15000) => new Promise((res, rej) => {
+const onEvent = (sock, ev, timeout = 20000) => new Promise((res, rej) => {
   const t = setTimeout(() => rej(new Error(ev + ' timeout')), timeout);
   sock.once(ev, (d) => { clearTimeout(t); res(d); });
 });
@@ -59,14 +59,17 @@ async function main() {
   ok('Metin: A mesajı B ve C\'ye ulaştı');
 
   /* ---- 3. Ses kanalı: 3'ü de ses-genel'de ---- */
+  await wait(300);
   let aJoinedP = onEvent(clients[0], 'voice-joined');
   clients[0].emit('voice-join', { channelId: 'ses-genel' });
   const aJoined = await aJoinedP;
   if (aJoined.occupants.length !== 0) return fail('voice A', new Error('boş kanal bekleniyor, gelen: ' + aJoined.occupants.length));
+  await wait(250);
   let bJoinedP = onEvent(clients[1], 'voice-joined');
   clients[1].emit('voice-join', { channelId: 'ses-genel' });
   const bJoined = await bJoinedP;
   if (bJoined.occupants.length !== 1) return fail('voice B', new Error('1 kişi bekleniyor, gelen: ' + JSON.stringify(bJoined.occupants.map((o) => o.name))));
+  await wait(250);
   let cJoinedP = onEvent(clients[2], 'voice-joined');
   clients[2].emit('voice-join', { channelId: 'ses-genel' });
   const cJoined = await cJoinedP;

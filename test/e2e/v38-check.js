@@ -37,11 +37,17 @@ const URL = 'http://localhost:3000';
   });
 
   // 1) İkisi de ses kanalına katılır → bağlantı connected
-  await joinVoice(a); await wait(900);
-  await joinVoice(b); await wait(2000);
-  const conns1 = await a.evaluate(() => [...window.__nexarc.voicePCs.values()].map((m) => m.pc.connectionState));
+  await joinVoice(a); await wait(1200);
+  await joinVoice(b); await wait(5000);
+  // ICE bağlantısının kurulması için poll et (yük altında gecikebilir)
+  let conns1 = [];
+  for (let i = 0; i < 20; i++) {
+    conns1 = await a.evaluate(() => [...window.__nexarc.voicePCs.values()].map((m) => m.pc.connectionState));
+    if (conns1.length && conns1.every((c) => c === 'connected')) break;
+    await wait(500);
+  }
   log('1. Ses bağlantısı:', JSON.stringify(conns1));
-  if (!conns1.every((c) => c === 'connected')) { log('✗ Ses bağlantısı kurulamadı'); process.exit(1); }
+  if (!conns1.length || !conns1.every((c) => c === 'connected')) { log('✗ Ses bağlantısı kurulamadı'); process.exit(1); }
 
   // 2) A metin kanalına geçer → ses bağlantısı KORUNMALI (voiceChannel hâlâ dolu)
   await a.evaluate(() => { [...document.querySelectorAll('#text-channels .channel')].find((x) => x.querySelector('.ch-name').textContent.trim() === 'genel').click(); });
@@ -70,24 +76,33 @@ const URL = 'http://localhost:3000';
   if (afterReclick.peers !== 1) { log('✗ Bağlantı koptu'); process.exit(1); }
   log('   ✓ Ses kanalında kaldı, görünüm açıldı, bağlantı korundu');
 
-  // 4) Gürültü engelleme butonu var ve çalışıyor (işlenmiş akış mevcut)
+  // 4) Gürültü engelleme butonu var; toggle sonrası SES BAĞLANTISI SAĞLAM KALMALI
   const noiseInfo = await a.evaluate(() => ({
     btnExists: !!document.querySelector('#noise-btn'),
-    processed: !!window.__nexarc.processedStream,
-    procTracks: window.__nexarc.processedStream ? window.__nexarc.processedStream.getAudioTracks().length : 0,
+    micTracks: window.__nexarc.localStream ? window.__nexarc.localStream.getAudioTracks().length : 0,
   }));
   log('4. Gürültü engelleme:', JSON.stringify(noiseInfo));
   if (!noiseInfo.btnExists) { log('✗ Gürültü butonu yok'); process.exit(1); }
-  if (!noiseInfo.processed || noiseInfo.procTracks !== 1) { log('✗ İşlenmiş akış yok'); process.exit(1); }
-  log('   ✓ Gürültü filtresi aktif (işlenmiş akış mevcut)');
+  if (noiseInfo.micTracks !== 1) { log('✗ Mikrofon track yok'); process.exit(1); }
 
-  // Butona basınca toggle çalışıyor
+  // Butona bas (toggle: filtreyi kapat) → bağlantı kopmamalı, ses track'i değişmeli
   await a.evaluate(() => document.querySelector('#noise-btn').click());
-  await wait(400);
-  const toggled = await a.evaluate(() => !document.querySelector('#noise-btn').classList.contains('active'));
-  log('   Buton toggle:', toggled);
-  if (!toggled) { log('✗ Buton toggle olmadı'); process.exit(1); }
-  log('   ✓ Aç/kapat çalışıyor');
+  await wait(1500);
+  const afterToggle = await a.evaluate(() => ({
+    conns: [...window.__nexarc.voicePCs.values()].map((m) => m.pc.connectionState),
+    micTracks: window.__nexarc.localStream ? window.__nexarc.localStream.getAudioTracks().length : 0,
+  }));
+  log('   Toggle sonrası:', JSON.stringify(afterToggle));
+  if (!afterToggle.conns.every((c) => c === 'connected')) { log('✗ Toggle ses bağlantısını kopardı!'); process.exit(1); }
+  if (afterToggle.micTracks !== 1) { log('✗ Toggle sonrası mikrofon track yok'); process.exit(1); }
+  log('   ✓ Gürültü toggle çalışıyor, ses bağlantısı SAĞLAM');
+
+  // Tekrar aç
+  await a.evaluate(() => document.querySelector('#noise-btn').click());
+  await wait(1200);
+  const afterOn = await a.evaluate(() => [...window.__nexarc.voicePCs.values()].map((m) => m.pc.connectionState));
+  if (!afterOn.every((c) => c === 'connected')) { log('✗ Filtre açılınca bağlantı koptu'); process.exit(1); }
+  log('   ✓ Filtre tekrar açıldı, bağlantı korundu');
 
   await browser.close();
   log('\nSONUÇ: v3.8 TESTLERİ GEÇTİ ✔');

@@ -155,7 +155,9 @@ const state = {
   pins: [],
   unread: new Map(),     // channelId -> sayı (okunmamış mesaj rozeti)
   lastRead: new Map(),   // channelId -> ts
-  mentionFlash: null,
+  newFlag: new Map(),    // channelId -> ayraç gösterilecek mi
+  screenAudioEls: new Map(), // peerId -> <audio> (ekran sesi)
+  pttOn: false,
 };
 
 // Test/debug için dışarıdan erişim
@@ -420,10 +422,28 @@ socket.on('connect', () => {
 
 socket.on('disconnect', () => setConn(false));
 
+/* Sunucudan atıldı (kick) */
+socket.on('kicked', () => {
+  state.joined = false;
+  state.wantedVoice = null;
+  saveToken(null);
+  for (const id of [...state.voicePCs.keys()]) removePeer(id);
+  if (state.localStream) { state.localStream.getTracks().forEach((t) => t.stop()); state.localStream = null; }
+  if (state.screenStream) stopScreen();
+  if (state.cameraStream) stopCamera();
+  state.voiceChannel = null;
+  $('#app').classList.add('hidden');
+  $('#login-overlay').classList.remove('hidden');
+  toast('🚫 Sunucudan atıldın');
+});
+
 socket.on('init', ({ self, channels }) => {
   state.self = self;
   state.joined = true;
   state.channels = channels;
+  // İlk açılış: tüm kanallar okundu sayılır
+  const now = Date.now();
+  channels.forEach((c) => { if (!state.lastRead.has(c.id)) state.lastRead.set(c.id, now); });
   $('#login-overlay').classList.add('hidden');
   $('#app').classList.remove('hidden');
   renderChannels();
@@ -436,6 +456,15 @@ socket.on('init', ({ self, channels }) => {
     const vc = channels.find((c) => c.id === state.wantedVoice && c.type === 'voice');
     if (vc) { state.wantedVoice = null; joinVoice(vc.id); }
   }
+  // Davet bağlantısı: ?join=kanal_id veya ?channel=kanal_id
+  try {
+    const inv = new URLSearchParams(location.search).get('join') || new URLSearchParams(location.search).get('channel');
+    if (inv) {
+      const ch = channels.find((c) => c.id === inv);
+      if (ch && ch.type === 'voice') joinVoice(ch.id);
+      else if (ch && ch.type === 'text') selectTextChannel(ch.id);
+    }
+  } catch (e) {}
 });
 
 socket.on('state', ({ users }) => {
@@ -508,14 +537,11 @@ socket.on('voice-joined', async ({ channelId, occupants }) => {
   state.voiceChannel = channelId;
   try {
     const devId = preferredMic();
-    state.localStream = await navigator.mediaDevices.getUserMedia(devId ? { audio: { deviceId: { exact: devId } } } : { audio: true });
+    // Tarayıcının YERLEŞİK gürültü engellemesi + yankı iptali (güvenli, sesi bozmaz)
+    const audioOpts = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+    if (devId) audioOpts.deviceId = { exact: devId };
+    state.localStream = await navigator.mediaDevices.getUserMedia({ audio: audioOpts });
     state.micOn = true;
-    // Gürültü engelleme: gürültü kapısı + ses yumuşatma (noise gate)
-    try {
-      state.processedStream = applyNoiseSuppression(state.localStream);
-    } catch (e) {
-      state.processedStream = state.localStream;
-    }
     attachAnalyser('self', state.localStream);
   } catch (e) {
     state.localStream = null;
@@ -974,6 +1000,17 @@ function openUserCard(userId, anchorEl) {
   } else {
     muteBtn.classList.add('hidden');
   }
+  // "At" butonu: yalnızca admin ve hedef kendin değilse
+  const kickBtn = $('#um-kick');
+  const isAdmin = state.self && state.self.role === 'admin';
+  if (kickBtn) {
+    if (isAdmin && userId !== state.self?.id) {
+      kickBtn.classList.remove('hidden');
+      kickBtn.textContent = '🚫 At';
+    } else {
+      kickBtn.classList.add('hidden');
+    }
+  }
   const dmBtn = $('#um-dm');
   dmBtn.textContent = u.username ? 'Mesaj Gönder' : 'DM yok (hesap gerekli)';
   dmBtn.disabled = !u.username;
@@ -1002,6 +1039,22 @@ if (umCardEl) {
   umCardEl.addEventListener('mouseleave', () => scheduleCloseUserCard(250));
 }
 /* #um-dm burada bağlanmaz — DM görünümü bölümündeki listener kullanılır (startDmWith) */
+const umKickBtn = $('#um-kick');
+if (umKickBtn) {
+  umKickBtn.onclick = () => {
+    const u = state.users.get(umUserId);
+    if (!u) return;
+    if (!window.confirm(u.name + ' sunucudan atılsın mı?')) return;
+    socket.emit('kick-user', { userId: u.id }, (res) => {
+      if (res && res.ok) {
+        toast('🚫 ' + u.name + ' atıldı');
+        closeUserCard();
+      } else {
+        toast((res && res.error) || 'Atılamadı');
+      }
+    });
+  };
+}
 $('#um-mute').onclick = () => {
   const u = state.users.get(umUserId);
   if (!u) return;
@@ -1010,8 +1063,13 @@ $('#um-mute').onclick = () => {
 
 function selectTextChannel(channelId) {
   closeMenu(); // mobilde çekmece kapansın
+  // Eski kanalın son okunma anını kaydet (yeni ayraç mantığı için)
+  if (state.textChannel && state.textChannel !== channelId) {
+    state.lastRead.set(state.textChannel, Date.now());
+  }
   state.textChannel = channelId;
   state.unread.set(channelId, 0);
+  state.newFlag.set(channelId, true);
   renderChannels();
   renderChannelUnread();
   const ch = state.channels.find((c) => c.id === channelId);
@@ -1095,6 +1153,11 @@ function appendMessage(msg, scroll) {
       box2.appendChild(r);
     }
     el.querySelector('.msg-body').appendChild(box2);
+  }
+  // Yeni mesaj ayracı: kanalı açtıktan SONRA gelen ilk mesajın üstüne "— Yeni —" koy
+  if (state.newFlag.get(msg.channelId) && msg.ts > (state.lastRead.get(msg.channelId) || 0)) {
+    state.newFlag.set(msg.channelId, false);
+    el.classList.add('new-msg');
   }
   box.appendChild(el);
   // Yeni mesaj görünür olsun: en alttaysan veya tarihçe yüklenirken kaydır
@@ -1345,59 +1408,6 @@ function mediaHtml(m) {
     return `<div class="chat-media"><audio src="${url}" controls preload="metadata"></audio></div>`;
   }
   return `<div class="chat-media"><a class="media-file" href="${url}" download="${name}"><span>📄</span><span class="mf-name">${name}</span><span class="mf-size">${fmtSize(m.size)}</span></a></div>`;
-}
-
-/* ---- Gürültü engelleme (noise gate + yumuşatma) ---- */
-/* Mikrofon akışını Web Audio ile işleyip arka plan gürültüsünü azaltır.
-   Yalnızca ses seviyesi eşiği aşınca ses geçer (gürültü kapısı) + yankıyı azaltır. */
-function applyNoiseSuppression(inputStream) {
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  const ctx = new AudioCtx();
-  const source = ctx.createMediaStreamSource(inputStream);
-
-  // 1) Gürültü kapısı (noise gate): sessiz anlarda sesi kes
-  const gate = ctx.createGain();
-  gate.gain.value = 0;
-  const gateLevel = ctx.createScriptProcessor(2048, 1, 1);
-  let open = false;
-  let attack = 0;
-  gateLevel.onaudioprocess = (ev) => {
-    const buf = ev.inputBuffer.getChannelData(0);
-    let sum = 0;
-    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-    const rms = Math.sqrt(sum / buf.length);
-    // Eşik: 0.02 (düşük sesler gürültü sayılır)
-    const threshold = 0.02;
-    if (rms > threshold) {
-      open = true;
-      attack = Math.min(1, attack + 0.15); // hızlı açılış
-    } else {
-      attack = Math.max(0, attack - 0.02); // yavaş kapanış (tıkırtı önler)
-    }
-    // açılış/kapanış geçişini yumuşat
-    const target = open ? Math.max(attack, 0.3) : 0;
-    const g = gate.gain;
-    g.setTargetAtTime(target, ctx.currentTime, 0.02);
-    gateLevel.onaudioprocess && ev; // no-op
-  };
-
-  // 2) Hafif yüksek geçiren filtre: uğultu/trafo sesini azalt
-  const hp = ctx.createBiquadFilter();
-  hp.type = 'highpass';
-  hp.frequency.value = 100;
-
-  source.connect(gate);
-  gate.connect(hp);
-  hp.connect(gateLevel);
-  gateLevel.connect(ctx.destination); // analiz için (duyulmaz, sadece işlem döngüsü)
-
-  // İşlenmiş akışı oluştur (yalnızca ses track'i)
-  const out = ctx.createMediaStreamDestination();
-  hp.connect(out);
-  const track = out.stream.getAudioTracks()[0];
-  const stream = new MediaStream([track]);
-  stream._noiseCtx = ctx; // temizlik için
-  return stream;
 }
 
 /* ---- Konuşan vurgusu (ses analizi) ---- */
@@ -1794,12 +1804,29 @@ function createPC(peerId, sendType, tracks, recvType) {
       renderVoiceGrid();
     } else {
       state.screens.set(peerId, stream);
+      // Ekran sesi (sistem sesi) varsa ayrı audio element ile çal
+      if (stream.getAudioTracks().length) {
+        let ael = state.screenAudioEls.get(peerId);
+        if (!ael) {
+          ael = document.createElement('audio');
+          ael.autoplay = true;
+          ael.style.display = 'none';
+          document.body.appendChild(ael);
+          state.screenAudioEls.set(peerId, ael);
+        }
+        ael.srcObject = stream;
+        ael.play().catch(() => {});
+      }
       renderScreenArea();
     }
   };
 
   pc.onnegotiationneeded = async () => {
     if (isReceiver) return; // alıcılar teklif atmaz, yalnızca cevap verir
+    // GLARE ÖNLEME: voice bağlantısında yalnızca KÜÇÜK id'li taraf offer atar.
+    // İki taraf aynı anda offer atarsa (glare) rollback bazen başarısız olur ve
+    // bağlantı kurulamaz ("new"de kalır). Bu yüzden tek offerer yeterli.
+    if (sendType === 'voice' && !(state.self.id < peerId)) return;
     try {
       meta.makingOffer = true;
       await pc.setLocalDescription();
@@ -1929,8 +1956,7 @@ async function handleSignal(from, wireType, data) {
 /* Ses kanalına bağlan: kullanıcıya ses PC'si kur */
 function connectVoicePeer(user) {
   if (state.voicePCs.has(user.id)) return;
-  const sendStream = state.processedStream || state.localStream;
-  const tracks = sendStream ? sendStream.getTracks() : [];
+  const tracks = state.localStream ? state.localStream.getTracks() : [];
   createPC(user.id, 'voice', tracks, 'voice');
   // Ben ekran paylaşıyorsam, yeni gelen kişiye ekranı gönder
   if (state.screenStream) {
@@ -2013,6 +2039,8 @@ function closeScreenPC(peerId) {
   const recv = state.screenRecvPCs.get(peerId);
   if (recv) { try { recv.pc.close(); } catch (e) {} state.screenRecvPCs.delete(peerId); }
   state.screens.delete(peerId);
+  const ael = state.screenAudioEls.get(peerId);
+  if (ael) { ael.srcObject = null; ael.remove(); state.screenAudioEls.delete(peerId); }
   if (lbPeer === peerId) closeScreenLightbox();
   renderScreenArea();
 }
@@ -2046,11 +2074,6 @@ function localVoiceReset(toastMsg) {
   state.wantedVoice = null;
   for (const id of [...state.voicePCs.keys()]) removePeer(id);
   if (state.localStream) { state.localStream.getTracks().forEach((t) => t.stop()); state.localStream = null; }
-  if (state.processedStream) {
-    try { if (state.processedStream._noiseCtx) state.processedStream._noiseCtx.close(); } catch (e) {}
-    state.processedStream.getTracks().forEach((t) => t.stop());
-    state.processedStream = null;
-  }
   if (state.screenStream) stopScreen();
   if (state.cameraStream) stopCamera();
   state.voiceChannel = null;
@@ -2075,8 +2098,7 @@ function leaveVoice() {
 function toggleMic() {
   if (!state.localStream) { toast('Mikrofon yok — izin verilmedi'); return; }
   state.micOn = !state.micOn;
-  state.localStream.getAudioTracks().forEach((t) => { t.enabled = state.micOn; });
-  if (state.processedStream) state.processedStream.getAudioTracks().forEach((t) => { t.enabled = state.micOn; });
+  if (!state.pttOn) state.localStream.getAudioTracks().forEach((t) => { t.enabled = state.micOn; });
   updateMicUI();
   renderVoiceGrid();
 }
@@ -2097,7 +2119,7 @@ async function toggleScreen() {
         width: { ideal: 2560, max: 3840 },
         height: { ideal: 1440, max: 2160 },
       },
-      audio: false,
+      audio: true, // sistem sesi (video/müzik) paylaşımı
     });
     const vTrack = stream.getVideoTracks()[0];
     // Detay odaklı kodlama: metin/arayüz paylaşırken netlik artar
@@ -2143,25 +2165,66 @@ $('#cam-btn').onclick = toggleCamera;
 $('#share-btn').onclick = toggleScreen;
 $('#leave-btn').onclick = leaveVoice;
 
-/* --- Gürültü engelleme aç/kapat --- */
+/* --- Push to Talk: Boşluk basılı tutunca konuş --- */
+let pttKeyDown = false;
+function setMicEnabled(on) {
+  if (!state.localStream) return;
+  state.localStream.getAudioTracks().forEach((t) => { t.enabled = on; });
+}
+const pttBtn = $('#ptt-btn');
+if (pttBtn) {
+  pttBtn.onclick = () => {
+    state.pttOn = !state.pttOn;
+    pttBtn.classList.toggle('active', state.pttOn);
+    if (state.pttOn) {
+      setMicEnabled(false);
+      toast('Push to Talk açık — konuşmak için Boşluk tuşunu basılı tut');
+    } else {
+      setMicEnabled(state.micOn);
+      toast('Push to Talk kapalı');
+    }
+  };
+}
+document.addEventListener('keydown', (e) => {
+  if (state.pttOn && state.voiceChannel && e.code === 'Space' && document.activeElement !== $('#chat-input')) {
+    e.preventDefault();
+    if (!pttKeyDown) { pttKeyDown = true; setMicEnabled(true); }
+  }
+});
+document.addEventListener('keyup', (e) => {
+  if (state.pttOn && e.code === 'Space') { pttKeyDown = false; setMicEnabled(false); }
+});
+
+/* --- Gürültü engelleme aç/kapat (tarayıcı constraint + replaceTrack) --- */
 let noiseOn = true;
+async function setNoise(on) {
+  noiseOn = on;
+  const devId = preferredMic();
+  const audioOpts = { echoCancellation: on, noiseSuppression: on, autoGainControl: on };
+  if (devId) audioOpts.deviceId = { exact: devId };
+  try {
+    const newStream = await navigator.mediaDevices.getUserMedia({ audio: audioOpts });
+    // Eski mikrofon track'lerini durdur
+    if (state.localStream) state.localStream.getTracks().forEach((t) => t.stop());
+    state.localStream = newStream;
+    state.micOn = true;
+    // Mevcut WebRTC bağlantılarındaki ses track'ini yenisiyle değiştir (bağlantı kopmaz)
+    for (const meta of state.voicePCs.values()) {
+      const sender = meta.pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+      if (sender) { try { await sender.replaceTrack(newStream.getAudioTracks()[0]); } catch (e) {} }
+    }
+    attachAnalyser('self', newStream);
+    updateMicUI();
+    toast(noiseOn ? '🎧 Gürültü engelleme açık' : '🎧 Gürültü engelleme kapalı');
+  } catch (e) {
+    toast('Mikrofon yeniden alınamadı');
+  }
+}
 const noiseBtn = $('#noise-btn');
 if (noiseBtn) {
   noiseBtn.onclick = () => {
-    noiseOn = !noiseOn;
-    noiseBtn.classList.toggle('active', noiseOn);
-    if (state.localStream) {
-      const sendStream = state.processedStream || state.localStream;
-      sendStream.getAudioTracks().forEach((t) => { t.enabled = noiseOn ? state.micOn : state.micOn; });
-      // Gürültü filtresi kapalıysa ham akışa dön (işlenmiş akışın gain'ini 0 yap)
-      if (state.processedStream && state.processedStream._noiseCtx) {
-        try {
-          // ScriptProcessor durdurulamaz basitçe; gain ile sessizleştir yerine
-          // track enabled ile yönetiyoruz — gerçek filtre değişimi için yeniden kur
-        } catch (e) {}
-      }
-    }
-    toast(noiseOn ? '🎧 Gürültü engelleme açık' : '🎧 Gürültü engelleme kapalı');
+    noiseBtn.classList.toggle('active', !noiseOn);
+    setNoise(!noiseOn);
   };
 }
 // Ayrıl butonunu doldur (ikonsuz boş kalmasın)

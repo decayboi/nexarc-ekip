@@ -397,6 +397,21 @@ io.on('connection', (socket) => {
     }
   }
 
+  /* ---- Kick (admin) ---- */
+  socket.on('kick-user', ({ userId }, cb) => {
+    const user = users.get(socket.id);
+    if (!user || user.role !== 'admin') return cb && cb({ ok: false, error: 'Bu işlem için admin gerekli' });
+    const target = users.get(String(userId || ''));
+    if (!target) return cb && cb({ ok: false, error: 'Kullanıcı bulunamadı' });
+    if (target.id === socket.id) return cb && cb({ ok: false, error: 'Kendini atamazsın' });
+    const s = io.sockets.sockets.get(target.id);
+    if (s) {
+      s.emit('kicked', {});
+      setTimeout(() => s.disconnect(true), 80);
+    }
+    cb && cb({ ok: true });
+  });
+
   /* ---- Ses kanalları ---- */
   socket.on('voice-join', ({ channelId }) => {
     const user = users.get(socket.id);
