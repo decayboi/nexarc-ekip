@@ -274,6 +274,20 @@ io.on('connection', (socket) => {
     };
     pushChat(channelId, msg);
     io.to('ch:' + channelId).emit('chat', msg);
+
+    /* @bahsetme: hedeflenen kullanıcı çevrimiçiyse bildirim gönder */
+    const mentions = new Set();
+    for (const m of msgText.matchAll(/@([a-zA-Z0-9_ğüşiöçĞÜŞİÖÇ]+)/g)) {
+      const uname = m[1].toLowerCase();
+      if (accounts[uname] && uname !== (user.username || '')) mentions.add(uname);
+    }
+    if (mentions.size) {
+      for (const [sid, u] of users) {
+        if (u.username && mentions.has(u.username)) {
+          io.to(sid).emit('mention', { channelId, from: user.name, text: msgText.slice(0, 120), channelName: (CHANNELS.find((c) => c.id === channelId) || {}).name || 'DM' });
+        }
+      }
+    }
   });
 
   socket.on('delete-message', ({ channelId, messageId }, cb) => {

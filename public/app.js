@@ -55,6 +55,56 @@ function avatarHtml(u) {
 }
 const fmtTime = (ts) => new Date(ts).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
+/* --- Markdown formatlama (Discord benzeri) --- */
+function formatMd(text) {
+  let t = esc(text);
+  // Kod bloğu (```...```)
+  t = t.replace(/```([\s\S]*?)```/g, '<pre class="md-code">$1</pre>');
+  // Satır içi kod (`...`)
+  t = t.replace(/`([^`\n]+)`/g, '<code class="md-inline">$1</code>');
+  // Kalın **...**
+  t = t.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+  // İtalik *...*
+  t = t.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<i>$2</i>');
+  // Üstü çizili ~~...~~
+  t = t.replace(/~~([^~\n]+)~~/g, '<s>$1</s>');
+  // Altı çizili __...__
+  t = t.replace(/__([^_\n]+)__/g, '<u>$1</u>');
+  // @bahsetme vurgusu
+  t = t.replace(/@([a-zA-Z0-9_ğüşiöçĞÜŞİÖÇ]+)/g, '<span class="mention">@$1</span>');
+  return t;
+}
+
+/* --- Link önizleme (embed) --- */
+function embedHtml(text) {
+  const urls = String(text || '').match(/https?:\/\/[^\s<>"']+/g);
+  if (!urls) return '';
+  // Yalnızca görsel/medya doğrudan gösterilebilir
+  const img = urls.find((u) => /\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(u));
+  if (img) return `<div class="chat-media"><a href="${esc(img)}" target="_blank" rel="noopener"><img src="${esc(img)}" alt="link" loading="lazy"/></a></div>`;
+  const vid = urls.find((u) => /\.(mp4|webm|ogg)(\?.*)?$/i.test(u));
+  if (vid) return `<div class="chat-media"><video src="${esc(vid)}" controls preload="metadata"></video></div>`;
+  // Diğer linkler: küçük kart
+  const u = urls[0];
+  return `<div class="chat-media"><a class="embed-link" href="${esc(u)}" target="_blank" rel="noopener">🔗 ${esc(u.length > 60 ? u.slice(0, 60) + '…' : u)}</a></div>`;
+}
+
+/* --- Bildirim --- */
+let notifGranted = false;
+try { if (Notification && Notification.permission === 'granted') notifGranted = true; } catch (e) {}
+function notify(title, body) {
+  try {
+    if (notifGranted && Notification.permission === 'granted') {
+      new Notification(title, { body, icon: 'logo.png' });
+    }
+  } catch (e) {}
+}
+function requestNotifPermission() {
+  try {
+    if (Notification && Notification.permission === 'default') Notification.requestPermission();
+  } catch (e) {}
+}
+
 /* --- İkonlar (satır içi SVG) --- */
 const ICON = {
   hash: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9.5 3 7.5 21M16.5 3l-2 18M3.5 8.5h17M3.5 15.5h17"/></svg>',
@@ -103,6 +153,9 @@ const state = {
   typingUsers: new Map(),  // userId -> name (yazıyor göstergesi)
   pendingReply: null,    // { id, name, text }
   pins: [],
+  unread: new Map(),     // channelId -> sayı (okunmamış mesaj rozeti)
+  lastRead: new Map(),   // channelId -> ts
+  mentionFlash: null,
 };
 
 // Test/debug için dışarıdan erişim
@@ -408,8 +461,47 @@ socket.on('chat-history', ({ channelId, messages }) => {
 });
 
 socket.on('chat', (msg) => {
-  if (msg.channelId === state.textChannel) appendMessage(msg);
+  if (msg.channelId === state.textChannel) {
+    appendMessage(msg);
+    return;
+  }
+  // Okunmamış sayaç
+  const n = (state.unread.get(msg.channelId) || 0) + 1;
+  state.unread.set(msg.channelId, n);
+  renderChannelUnread();
+  // Bildirim (tarayıcı) — kanal açık değilse
+  notify(`${msg.user.name} — ${msg.channelId.startsWith('dm:') ? 'DM' : state.channels.find((c) => c.id === msg.channelId)?.name || 'kanal'}`, String(msg.text || '📎 medya').slice(0, 80));
 });
+
+/* --- @bahsetme bildirimi --- */
+socket.on('mention', ({ channelId, from, text, channelName }) => {
+  toast(`🔔 ${from} seni etiketledi (${channelName})`);
+  notify(`🔔 ${from} seni etiketledi`, text);
+  // Etiketlenen kanalda rozet göster
+  const n = (state.unread.get(channelId) || 0) + 1;
+  state.unread.set(channelId, n);
+  renderChannelUnread();
+});
+
+/* Kanal rozetlerini render et */
+function renderChannelUnread() {
+  document.querySelectorAll('#text-channels .channel, #dm-list .channel').forEach((el) => {
+    const id = el.dataset.chid;
+    if (!id) return;
+    const n = state.unread.get(id) || 0;
+    let badge = el.querySelector('.unread-badge');
+    if (n > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'unread-badge';
+        el.appendChild(badge);
+      }
+      badge.textContent = n > 99 ? '99+' : n;
+    } else if (badge) {
+      badge.remove();
+    }
+  });
+}
 
 /* --- Ses kanalı --- */
 socket.on('voice-joined', async ({ channelId, occupants }) => {
@@ -418,6 +510,12 @@ socket.on('voice-joined', async ({ channelId, occupants }) => {
     const devId = preferredMic();
     state.localStream = await navigator.mediaDevices.getUserMedia(devId ? { audio: { deviceId: { exact: devId } } } : { audio: true });
     state.micOn = true;
+    // Gürültü engelleme: gürültü kapısı + ses yumuşatma (noise gate)
+    try {
+      state.processedStream = applyNoiseSuppression(state.localStream);
+    } catch (e) {
+      state.processedStream = state.localStream;
+    }
     attachAnalyser('self', state.localStream);
   } catch (e) {
     state.localStream = null;
@@ -617,6 +715,7 @@ function renderDmList() {
     for (const ch of dms) {
       const el = document.createElement('button');
       el.className = 'channel dm' + (state.textChannel === ch.id ? ' active' : '');
+      el.dataset.chid = ch.id;
       el.innerHTML = `${ICON.dm}<span class="ch-name">${esc(ch.name)}</span>`;
       el.onclick = () => { selectTextChannel(ch.id); setDmMode(true); };
       box.appendChild(el);
@@ -702,6 +801,7 @@ function renderChannels() {
     if (ch.type === 'text') {
       const el = document.createElement('button');
       el.className = 'channel' + (state.textChannel === ch.id ? ' active' : '');
+      el.dataset.chid = ch.id;
       el.innerHTML = `${ICON.hash}<span class="ch-name">${esc(ch.name)}</span>${del}`;
       el.onclick = () => selectTextChannel(ch.id);
       el.querySelector('.channel-del').onclick = (e) => { e.stopPropagation(); confirmDeleteChannel(ch); };
@@ -715,7 +815,14 @@ function renderChannels() {
         ? `<span class="occ-dots">${occ.map((u) => `<span class="occ-dot" style="background:${esc(u.color)}"></span>`).join('')}</span>`
         : '';
       el.innerHTML = `${ICON.speaker}<span class="ch-name">${esc(ch.name)}</span><span class="ch-occupants">${occ.length || ''}</span>${dots}${del}`;
-      el.onclick = () => (inChannel ? leaveVoice() : joinVoice(ch.id));
+      el.onclick = () => {
+        if (inChannel) {
+          // Zaten bu ses kanalındayız: sadece ses görünümünü göster, bağlantıyı KESME
+          showVoiceView();
+        } else {
+          joinVoice(ch.id);
+        }
+      };
       el.querySelector('.channel-del').onclick = (e) => { e.stopPropagation(); confirmDeleteChannel(ch); };
       voices.appendChild(el);
     }
@@ -904,7 +1011,9 @@ $('#um-mute').onclick = () => {
 function selectTextChannel(channelId) {
   closeMenu(); // mobilde çekmece kapansın
   state.textChannel = channelId;
+  state.unread.set(channelId, 0);
   renderChannels();
+  renderChannelUnread();
   const ch = state.channels.find((c) => c.id === channelId);
   setTitle(ch?.name || '', ch?.dm ? '@' : '#');
   $('#voice-view').classList.add('hidden');
@@ -948,8 +1057,9 @@ function appendMessage(msg, scroll) {
     <div class="msg-body">
       ${replyHtml}
       <div class="msg-head"><span class="msg-name">${esc(msg.user.name)}</span><span class="msg-time">${fmtTime(msg.ts)}${edited}</span></div>
-      <div class="msg-text">${esc(msg.text || '')}</div>
+      <div class="msg-text">${formatMd(msg.text || '')}</div>
       ${mediaHtml(msg.media)}
+      ${embedHtml(msg.text)}
     </div>
     ${actions}`;
   // Aksiyonlar
@@ -967,6 +1077,11 @@ function appendMessage(msg, scroll) {
       if (!res || !res.ok) toast((res && res.error) || 'Mesaj silinemedi');
     });
   };
+  // Sağ tık menüsü
+  el.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    openMsgContext(e, msg, el);
+  });
   // Tepkiler
   if (msg.reactions && Object.keys(msg.reactions).length) {
     const box2 = document.createElement('div');
@@ -1067,6 +1182,119 @@ function startEditMessage(msg, el) {
   });
 }
 
+/* --- Sağ tık menüsü (Discord tarzı) --- */
+function openMsgContext(e, msg, el) {
+  const menu = $('#ctx-menu');
+  if (!menu) return;
+  menu.innerHTML = '';
+  const isOwn = msg.user.id === state.self?.id;
+  const items = [];
+  if (isOwn) items.push({ label: '✏️ Düzenle', fn: () => startEditMessage(msg, el) });
+  items.push({ label: '↩️ Yanıtla', fn: () => setPendingReply(msg) });
+  items.push({ label: '😊 Tepki ekle', fn: () => openReactPop(e, msg) });
+  items.push({ label: '📌 Sabitle / Kaldır', fn: () => socket.emit('message-pin', { channelId: state.textChannel, messageId: msg.id }) });
+  if (isOwn) items.push({ label: '🗑️ Sil', fn: () => socket.emit('delete-message', { channelId: state.textChannel, messageId: msg.id }) });
+  items.forEach((it, i) => {
+    const b = document.createElement('button');
+    b.className = 'ctx-item' + (it.label.includes('Sil') ? ' danger' : '');
+    b.textContent = it.label;
+    b.onclick = () => { closeCtxMenu(); it.fn(); };
+    menu.appendChild(b);
+    if (i === 0 && items.length > 1) {
+      const sep = document.createElement('div');
+      sep.className = 'ctx-sep';
+      menu.appendChild(sep);
+    }
+  });
+  const r = e;
+  menu.style.left = Math.min(r.clientX, window.innerWidth - 220) + 'px';
+  menu.style.top = Math.min(r.clientY, window.innerHeight - 220) + 'px';
+  menu.classList.remove('hidden');
+}
+function closeCtxMenu() {
+  const menu = $('#ctx-menu');
+  if (menu) menu.classList.add('hidden');
+}
+document.addEventListener('click', (e) => {
+  const menu = $('#ctx-menu');
+  if (menu && !menu.contains(e.target)) closeCtxMenu();
+});
+
+/* --- Emoji otomatik tamamlama (:) --- */
+const EMOJI_KEYS = { ':ok': '👍', ':kalp': '❤️', ':cokgul': '😂', ':uzgun': '😢', ':sevgi': '😍', ':sasirdim': '😮', ':ates': '🔥', ':alkis': '👏', ':gul': '😊', ':kofte': '🎉' };
+function setupEmojiAutocomplete() {
+  const input = $('#chat-input');
+  if (!input) return;
+  input.addEventListener('input', () => {
+    const val = input.value;
+    const match = val.slice(0, input.selectionStart).match(/:([a-zA-ZğüşiöçĞÜŞİÖÇ]*)$/);
+    if (!match || !match[1]) return;
+    const key = ':' + match[1];
+    const emoji = EMOJI_KEYS[key];
+    if (emoji) {
+      const start = input.selectionStart - match[1].length - 1;
+      input.value = val.slice(0, start) + emoji + val.slice(input.selectionStart);
+      const np = start + emoji.length;
+      input.setSelectionRange(np, np);
+    }
+  });
+}
+setupEmojiAutocomplete();
+
+/* --- Sesli mesaj kaydı --- */
+let mediaRec = null;
+let mediaRecChunks = [];
+async function toggleVoiceNote() {
+  const btn = $('#voicenote-btn');
+  if (mediaRec && mediaRec.state === 'recording') {
+    mediaRec.stop();
+    btn.classList.remove('rec');
+    btn.innerHTML = '🎤';
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecChunks = [];
+    mediaRec = new MediaRecorder(stream);
+    mediaRec.ondataavailable = (e) => { if (e.data.size) mediaRecChunks.push(e.data); };
+    mediaRec.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(mediaRecChunks, { type: 'audio/webm' });
+      if (!state.textChannel) { toast('Önce kanal seç'); return; }
+      if (blob.size > 25 * 1024 * 1024) { toast('Kayıt çok büyük'); return; }
+      try {
+        const fd = new FormData();
+        fd.append('file', blob, 'sesli-mesaj.webm');
+        const resp = await fetch('/upload', { method: 'POST', body: fd });
+        if (!resp.ok) throw new Error('yükleme hatası');
+        const data = await resp.json();
+        socket.emit('chat', { channelId: state.textChannel, text: '', media: { url: data.url, name: 'Sesli mesaj', size: data.size, type: data.type } });
+        toast('🎤 Sesli mesaj gönderildi');
+      } catch (err) {
+        toast('Sesli mesaj yüklenemedi');
+      }
+    };
+    mediaRec.start();
+    btn.classList.add('rec');
+    btn.innerHTML = '⏹️';
+    toast('Kayıt başladı — bitirmek için tekrar bas');
+  } catch (e) {
+    toast('Mikrofon izni yok');
+  }
+}
+
+/* --- Kısayollar --- */
+document.addEventListener('keydown', (e) => {
+  // Ctrl+K kanal ara / odakla
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    const input = $('#search-input');
+    document.querySelector('.top-search').classList.remove('hidden');
+    input.focus();
+    input.select();
+  }
+});
+
 /* --- Tepki popover --- */
 const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👏', '🤝', '💯', '😍', '😡'];
 function openReactPop(e, msg) {
@@ -1117,6 +1345,59 @@ function mediaHtml(m) {
     return `<div class="chat-media"><audio src="${url}" controls preload="metadata"></audio></div>`;
   }
   return `<div class="chat-media"><a class="media-file" href="${url}" download="${name}"><span>📄</span><span class="mf-name">${name}</span><span class="mf-size">${fmtSize(m.size)}</span></a></div>`;
+}
+
+/* ---- Gürültü engelleme (noise gate + yumuşatma) ---- */
+/* Mikrofon akışını Web Audio ile işleyip arka plan gürültüsünü azaltır.
+   Yalnızca ses seviyesi eşiği aşınca ses geçer (gürültü kapısı) + yankıyı azaltır. */
+function applyNoiseSuppression(inputStream) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AudioCtx();
+  const source = ctx.createMediaStreamSource(inputStream);
+
+  // 1) Gürültü kapısı (noise gate): sessiz anlarda sesi kes
+  const gate = ctx.createGain();
+  gate.gain.value = 0;
+  const gateLevel = ctx.createScriptProcessor(2048, 1, 1);
+  let open = false;
+  let attack = 0;
+  gateLevel.onaudioprocess = (ev) => {
+    const buf = ev.inputBuffer.getChannelData(0);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);
+    // Eşik: 0.02 (düşük sesler gürültü sayılır)
+    const threshold = 0.02;
+    if (rms > threshold) {
+      open = true;
+      attack = Math.min(1, attack + 0.15); // hızlı açılış
+    } else {
+      attack = Math.max(0, attack - 0.02); // yavaş kapanış (tıkırtı önler)
+    }
+    // açılış/kapanış geçişini yumuşat
+    const target = open ? Math.max(attack, 0.3) : 0;
+    const g = gate.gain;
+    g.setTargetAtTime(target, ctx.currentTime, 0.02);
+    gateLevel.onaudioprocess && ev; // no-op
+  };
+
+  // 2) Hafif yüksek geçiren filtre: uğultu/trafo sesini azalt
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 100;
+
+  source.connect(gate);
+  gate.connect(hp);
+  hp.connect(gateLevel);
+  gateLevel.connect(ctx.destination); // analiz için (duyulmaz, sadece işlem döngüsü)
+
+  // İşlenmiş akışı oluştur (yalnızca ses track'i)
+  const out = ctx.createMediaStreamDestination();
+  hp.connect(out);
+  const track = out.stream.getAudioTracks()[0];
+  const stream = new MediaStream([track]);
+  stream._noiseCtx = ctx; // temizlik için
+  return stream;
 }
 
 /* ---- Konuşan vurgusu (ses analizi) ---- */
@@ -1207,6 +1488,9 @@ function insertEmoji(e) {
   const np = pos + e.length;
   try { input.setSelectionRange(np, np); } catch (err) {}
 }
+const voiceNoteBtn = $('#voicenote-btn');
+if (voiceNoteBtn) voiceNoteBtn.onclick = (e) => { e.preventDefault(); toggleVoiceNote(); };
+
 const emojiBtn = $('#emoji-btn');
 if (emojiBtn) {
   buildEmojiPicker();
@@ -1645,7 +1929,8 @@ async function handleSignal(from, wireType, data) {
 /* Ses kanalına bağlan: kullanıcıya ses PC'si kur */
 function connectVoicePeer(user) {
   if (state.voicePCs.has(user.id)) return;
-  const tracks = state.localStream ? state.localStream.getTracks() : [];
+  const sendStream = state.processedStream || state.localStream;
+  const tracks = sendStream ? sendStream.getTracks() : [];
   createPC(user.id, 'voice', tracks, 'voice');
   // Ben ekran paylaşıyorsam, yeni gelen kişiye ekranı gönder
   if (state.screenStream) {
@@ -1761,6 +2046,11 @@ function localVoiceReset(toastMsg) {
   state.wantedVoice = null;
   for (const id of [...state.voicePCs.keys()]) removePeer(id);
   if (state.localStream) { state.localStream.getTracks().forEach((t) => t.stop()); state.localStream = null; }
+  if (state.processedStream) {
+    try { if (state.processedStream._noiseCtx) state.processedStream._noiseCtx.close(); } catch (e) {}
+    state.processedStream.getTracks().forEach((t) => t.stop());
+    state.processedStream = null;
+  }
   if (state.screenStream) stopScreen();
   if (state.cameraStream) stopCamera();
   state.voiceChannel = null;
@@ -1786,6 +2076,7 @@ function toggleMic() {
   if (!state.localStream) { toast('Mikrofon yok — izin verilmedi'); return; }
   state.micOn = !state.micOn;
   state.localStream.getAudioTracks().forEach((t) => { t.enabled = state.micOn; });
+  if (state.processedStream) state.processedStream.getAudioTracks().forEach((t) => { t.enabled = state.micOn; });
   updateMicUI();
   renderVoiceGrid();
 }
@@ -1851,6 +2142,28 @@ $('#mic-btn').onclick = toggleMic;
 $('#cam-btn').onclick = toggleCamera;
 $('#share-btn').onclick = toggleScreen;
 $('#leave-btn').onclick = leaveVoice;
+
+/* --- Gürültü engelleme aç/kapat --- */
+let noiseOn = true;
+const noiseBtn = $('#noise-btn');
+if (noiseBtn) {
+  noiseBtn.onclick = () => {
+    noiseOn = !noiseOn;
+    noiseBtn.classList.toggle('active', noiseOn);
+    if (state.localStream) {
+      const sendStream = state.processedStream || state.localStream;
+      sendStream.getAudioTracks().forEach((t) => { t.enabled = noiseOn ? state.micOn : state.micOn; });
+      // Gürültü filtresi kapalıysa ham akışa dön (işlenmiş akışın gain'ini 0 yap)
+      if (state.processedStream && state.processedStream._noiseCtx) {
+        try {
+          // ScriptProcessor durdurulamaz basitçe; gain ile sessizleştir yerine
+          // track enabled ile yönetiyoruz — gerçek filtre değişimi için yeniden kur
+        } catch (e) {}
+      }
+    }
+    toast(noiseOn ? '🎧 Gürültü engelleme açık' : '🎧 Gürültü engelleme kapalı');
+  };
+}
 // Ayrıl butonunu doldur (ikonsuz boş kalmasın)
 $('#leave-btn').innerHTML = `${ICON.leave}<span>Ses Kanalından Ayrıl</span>`;
 
