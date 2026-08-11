@@ -504,7 +504,7 @@ body[data-theme="acik"] .top-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.12)
   justify-content: center;
   gap: 10px;
   padding: 6px 0 8px;
-  max-height: 210px;
+  max-height: 260px;
   overflow-y: auto;
   flex-shrink: 0;
   width: 100%;
@@ -520,46 +520,54 @@ body[data-theme="acik"] .top-logo { box-shadow: 0 2px 8px rgba(20, 30, 50, 0.12)
 /* ---- Dinamik yerleşim (Discord gibi) ---- */
 /* 1 kamera: ortada büyük */
 .cam-gallery[data-count="1"] {
-  grid-template-columns: minmax(300px, 420px);
-  max-width: 420px;
+  display: flex;
+  justify-content: center;
+  max-width: 440px;
 }
+.cam-gallery[data-count="1"] .cam-card { width: 100%; max-width: 420px; }
 /* 2 kamera: yan yana simetrik */
 .cam-gallery[data-count="2"] {
-  grid-template-columns: repeat(2, minmax(240px, 320px));
-  max-width: 660px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  max-width: 680px;
 }
-/* 3 kamera: ÜÇGEN — üstte 1 büyük, altta 2 küçük */
+.cam-gallery[data-count="2"] .cam-card { width: 47%; }
+/* 3 kamera: TERS ÜÇGEN 🔻 — flex-wrap (çakışma imkânsız):
+   üstte 2 yan yana, altta 1 ortada BÜYÜK */
 .cam-gallery[data-count="3"] {
-  grid-template-columns: repeat(2, minmax(220px, 300px));
-  grid-template-areas:
-    "a a"
-    "b c";
-  max-width: 620px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  max-width: 680px;
 }
-.cam-gallery[data-count="3"] .cam-card:nth-child(1) { grid-area: a; }
-.cam-gallery[data-count="3"] .cam-card:nth-child(2) { grid-area: b; }
-.cam-gallery[data-count="3"] .cam-card:nth-child(3) { grid-area: c; }
-/* 4 kamera: 2x2 */
+.cam-gallery[data-count="3"] .cam-card { width: 46%; }
+.cam-gallery[data-count="3"] .cam-card:nth-child(3) { width: 72%; }
+/* 4 kamera: YATAY DÖRTGEN — flex-wrap 2x2 (üstte 2, altta 2) */
 .cam-gallery[data-count="4"] {
-  grid-template-columns: repeat(2, minmax(220px, 300px));
-  grid-template-areas:
-    "a b"
-    "c d";
-  max-width: 620px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: 720px;
 }
-.cam-gallery[data-count="4"] .cam-card:nth-child(1) { grid-area: a; }
-.cam-gallery[data-count="4"] .cam-card:nth-child(2) { grid-area: b; }
-.cam-gallery[data-count="4"] .cam-card:nth-child(3) { grid-area: c; }
-.cam-gallery[data-count="4"] .cam-card:nth-child(4) { grid-area: d; }
+.cam-gallery[data-count="4"] .cam-card { width: 47%; }
 /* 5+ kamera: kompakt grid */
 .cam-gallery[data-count="5"], .cam-gallery[data-count="6"] {
-  grid-template-columns: repeat(3, minmax(170px, 220px));
-  max-width: 700px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: 760px;
 }
+.cam-gallery[data-count="5"] .cam-card, .cam-gallery[data-count="6"] .cam-card { width: 30%; }
 @media (max-width: 640px) {
   .cam-gallery[data-count="1"] { grid-template-columns: minmax(220px, 90vw); }
   .cam-gallery[data-count="2"] { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
-  .cam-gallery[data-count="3"] { grid-template-columns: repeat(2, minmax(120px, 1fr)); max-height: 170px; }
+  .cam-gallery[data-count="3"] .cam-card { width: 47%; }
+  .cam-gallery[data-count="3"] .cam-card:nth-child(3) { width: 78%; }
   .cam-gallery[data-count="4"] { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
 }
 .cam-card video {
