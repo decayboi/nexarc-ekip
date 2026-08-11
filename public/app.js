@@ -14,6 +14,10 @@ const ICE = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    // Ücretsiz TURN (Open Relay): simetrik NAT/okul-şirket ağlarında bile
+    // ses/video bağlantısı kurulabilmesini garanti eder
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
   ],
 };
 
@@ -185,6 +189,7 @@ const state = {
   newFlag: new Map(),    // channelId -> ayraç gösterilecek mi
   screenAudioEls: new Map(), // peerId -> <audio> (ekran sesi)
   pttOn: false,
+  pendingPeers: [], // mikrofon hazır olmadan gelen katılımcılar
 };
 
 // Test/debug için dışarıdan erişim
@@ -594,9 +599,11 @@ socket.on('voice-joined', async ({ channelId, occupants }) => {
   }
   updateMicUI();
   updateCamUI();
+  // Mikrofon hazır (getUserMedia tamamlandı) — tüm katılımcıları + bekleyenleri bağla
   for (const occ of occupants) connectVoicePeer(occ);
-  // Mikrofon hazır olduğuna göre, track'siz kurulan PC'lere ses track'ini ekle
-  // (getUserMedia'dan önce kurulmuşlarsa negotiationneeded tetiklenmemiş olabilir)
+  const pend = state.pendingPeers;
+  state.pendingPeers = [];
+  for (const pu of pend) connectVoicePeer(pu);
   if (state.localStream) ensureVoiceTracks();
   showVoiceView();
   renderChannels();
@@ -605,17 +612,34 @@ socket.on('voice-joined', async ({ channelId, occupants }) => {
   toast('Ses kanalına katıldın');
 });
 
-/* Track'siz ses PC'lerine mikrofon track'ini ekle + yeniden müzakere */
-function ensureVoiceTracks() {
+/* Mikrofon track'ini tüm ses bağlantılarına tak + SDP'de track yoksa yeniden müzakere */
+async function ensureVoiceTracks() {
   if (!state.localStream) return;
   const audioTrack = state.localStream.getAudioTracks()[0];
   if (!audioTrack) return;
   for (const [peerId, meta] of state.voicePCs) {
-    const hasAudioSender = meta.pc.getSenders().some((s) => s.track && s.track.kind === 'audio');
-    if (!hasAudioSender) {
+    let replaced = false;
+    if (meta.audioSender) {
+      try { await meta.audioSender.replaceTrack(audioTrack); replaced = true; } catch (e) {}
+    } else {
       try {
-        meta.pc.addTrack(audioTrack, state.localStream); // negotiationneeded'ı tetikler
+        const s = meta.pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+        if (s) { await s.replaceTrack(audioTrack); replaced = true; }
       } catch (e) {}
+    }
+    // Track SDP'ye işlenmediyse (PC track'siz kurulduysa) yeniden offer at
+    // — replaceTrack tek başına direction'ı güncellemez, negotiation şart
+    if (replaced && meta.needReneg && meta.pc.signalingState === 'stable') {
+      meta.needReneg = false;
+      try {
+        meta.makingOffer = true;
+        await meta.pc.setLocalDescription();
+        sendSignal(peerId, 'voice', { description: meta.pc.localDescription });
+      } catch (e) {
+        console.error('renegotiation hatası:', e);
+      } finally {
+        meta.makingOffer = false;
+      }
     }
   }
 }
@@ -1969,7 +1993,10 @@ function bufferCandidate(key, candidate) {
 }
 function flushCandidates(key, meta) {
   const arr = state.pendingCands.get(key);
-  if (!arr) return;
+  if (!arr || !arr.length) return;
+  // Remote description (SDP) henüz yoksa adaylar eklenemez — tekrar tamponla,
+  // setRemoteDescription başarılı olunca tekrar flush edilir
+  if (!meta.pc.remoteDescription) return;
   state.pendingCands.delete(key);
   arr.forEach((c) => { try { meta.pc.addIceCandidate(c); } catch (e) { console.warn('tampon aday eklenemedi:', e); } });
 }
@@ -1979,12 +2006,48 @@ function createPC(peerId, sendType, tracks, recvType) {
   const meta = { pc, makingOffer: false, ignoreOffer: false, polite: state.self.id < peerId };
   // Alıcı PC'ler (ekran/kamera izleyen taraf) yalnızca answer üretir — collision'ı önler
   const isReceiver = sendType === 'cam-recv' || sendType === 'screen-recv';
-  if (tracks.length) {
+  if (sendType === 'voice') {
+    // Mikrofon track'i VARSA kanıtlanmış addTrack kullan (SDP'ye track garantili girer).
+    // Track YOKSA (dinleme modu) transceiver kur — sonradan replaceTrack ile takılır.
+    const at = tracks.find((t) => t.kind === 'audio');
+    if (at) {
+      const stream = makeStream([at]);
+      pc.addTrack(at, stream);
+    } else {
+      const tr = pc.addTransceiver('audio', { direction: 'sendrecv' });
+      meta.audioSender = tr.sender;
+      meta.needReneg = true;
+    }
+  } else if (tracks.length) {
     const stream = makeStream(tracks);
     tracks.forEach((t) => pc.addTrack(t, stream));
   } else if (isReceiver) {
     try { pc.addTransceiver('video', { direction: 'recvonly' }); } catch (e) {}
   }
+
+  // Bağlantı kurtarma: failed olursa ICE restart dene (bazen NAT adresi değişir)
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'failed') {
+      try { pc.restartIce(); } catch (e) {}
+    }
+  };
+
+  // Sigorta: 8 saniyede bağlantı kurulamadıysa PC'yi kapatıp yeniden kur.
+  // (offer/answer yarışı bazen bağlantıyı "new"de bırakabilir — bu kendini onarır)
+  setTimeout(() => {
+    if (pc.connectionState === 'new' || pc.connectionState === 'connecting' || pc.connectionState === 'failed') {
+      try { pc.close(); } catch (e) {}
+      const map = sendType === 'voice' ? state.voicePCs
+        : (sendType === 'screen-send' ? state.screenSendPCs
+          : (sendType === 'cam-send' ? state.camSendPCs
+            : (sendType === 'cam-recv' ? state.camRecvPCs : state.screenRecvPCs)));
+      if (map.get(peerId) === meta) map.delete(peerId);
+      if (sendType === 'voice') {
+        const user = state.users.get(peerId);
+        if (user && state.voiceChannel && user.voiceChannel === state.voiceChannel) connectVoicePeer(user);
+      }
+    }
+  }, 8000);
 
   pc.onicecandidate = (e) => { if (e.candidate) sendSignal(peerId, sendType, { candidate: e.candidate }); };
 
@@ -2027,16 +2090,24 @@ function createPC(peerId, sendType, tracks, recvType) {
 
   pc.onnegotiationneeded = async () => {
     if (isReceiver) return; // alıcılar teklif atmaz, yalnızca cevap verir
-    // GLARE ÖNLEME: voice bağlantısında yalnızca KÜÇÜK id'li taraf offer atar.
-    // İki taraf aynı anda offer atarsa (glare) rollback bazen başarısız olur ve
-    // bağlantı kurulamaz ("new"de kalır). Bu yüzden tek offerer yeterli.
-    if (sendType === 'voice' && !(state.self.id < peerId)) return;
+    // Perfect negotiation: iki taraf da offer atabilir; çakışmada (glare)
+    // handleSignal içindeki polite/rollback mantığı çözer.
     try {
       meta.makingOffer = true;
       await pc.setLocalDescription();
       sendSignal(peerId, sendType, { description: pc.localDescription });
     } catch (err) {
-      console.error('offer hatası:', err);
+      // offer oluşturulamadı (örn. aynı anda gelen remote offer) — kısa sonra tekrar dene
+      console.warn('offer hatası, tekrar denenecek:', err.message);
+      setTimeout(() => {
+        if (meta.pc && meta.pc.signalingState === 'stable' && !meta.pc.remoteDescription) {
+          meta.makingOffer = true;
+          meta.pc.setLocalDescription()
+            .then(() => sendSignal(peerId, sendType, { description: meta.pc.localDescription }))
+            .catch(() => {})
+            .finally(() => { meta.makingOffer = false; });
+        }
+      }, 700);
     } finally {
       meta.makingOffer = false;
     }
@@ -2123,6 +2194,11 @@ async function handleSignal(from, wireType, data) {
   const { pc } = meta;
 
   if (data.candidate) {
+    if (!pc.remoteDescription) {
+      // SDP daha değişilmedi — adayı bekle ve sonra ekle (hata/bağlantı kaybı önler)
+      bufferCandidate(wireType + ':' + from, data.candidate);
+      return;
+    }
     try { await pc.addIceCandidate(data.candidate); } catch (e) { console.warn('ICE hatası:', e); }
     return;
   }
@@ -2143,6 +2219,8 @@ async function handleSignal(from, wireType, data) {
         return;
       }
     }
+    // SDP oturdu — bekleyen ICE adaylarını şimdi ekle (bağlantı tamamlansın)
+    flushCandidates(wireType + ':' + from, meta);
     if (data.description.type === 'offer') {
       // Cevap türü: gelen türün karşılığı
       const answerType = wireType === 'voice' ? 'voice'
@@ -2160,7 +2238,13 @@ async function handleSignal(from, wireType, data) {
 /* Ses kanalına bağlan: kullanıcıya ses PC'si kur */
 function connectVoicePeer(user) {
   if (state.voicePCs.has(user.id)) return;
-  const tracks = state.localStream ? state.localStream.getTracks() : [];
+  // Mikrofon HAZIR DEĞİLSE PC kurma — pending'e ekle, getUserMedia bitince bağlan.
+  // Track'siz kurulan PC'ler SDP'de 'recvonly' kalır ve tek yönlü ses olur.
+  if (!state.localStream) {
+    if (!state.pendingPeers.some((p) => p.id === user.id)) state.pendingPeers.push(user);
+    return;
+  }
+  const tracks = state.localStream.getTracks();
   createPC(user.id, 'voice', tracks, 'voice');
   ensureVoiceTracks();
   // Ben ekran paylaşıyorsam, yeni gelen kişiye ekranı gönder
@@ -2277,6 +2361,7 @@ function joinVoice(channelId) {
 /* Ses kanalı durumunu yerel olarak sıfırla (çıkış veya kanal silinmesi) */
 function localVoiceReset(toastMsg) {
   state.wantedVoice = null;
+  state.pendingPeers = [];
   for (const id of [...state.voicePCs.keys()]) removePeer(id);
   if (state.localStream) { state.localStream.getTracks().forEach((t) => t.stop()); state.localStream = null; }
   if (state.screenStream) stopScreen();
@@ -2414,9 +2499,13 @@ async function setNoise(on) {
     state.localStream = newStream;
     state.micOn = true;
     // Mevcut WebRTC bağlantılarındaki ses track'ini yenisiyle değiştir (bağlantı kopmaz)
+    const nt = newStream.getAudioTracks()[0];
     for (const meta of state.voicePCs.values()) {
-      const sender = meta.pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
-      if (sender) { try { await sender.replaceTrack(newStream.getAudioTracks()[0]); } catch (e) {} }
+      if (meta.audioSender) { try { await meta.audioSender.replaceTrack(nt); } catch (e) {} }
+      else {
+        const sender = meta.pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+        if (sender) { try { await sender.replaceTrack(nt); } catch (e) {} }
+      }
     }
     attachAnalyser('self', newStream);
     updateMicUI();

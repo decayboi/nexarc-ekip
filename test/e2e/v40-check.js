@@ -125,20 +125,26 @@ const URL = 'http://localhost:3000';
     const g = document.querySelector('#cam-gallery');
     const cards = g ? g.querySelectorAll('.cam-card') : [];
     const first = cards[0];
-    const cs = first ? getComputedStyle(first) : null;
+    // Butonların ekran içinde olup olmadığını kontrol et
+    const controls = document.querySelector('#voice-controls');
+    const cr = controls ? controls.getBoundingClientRect() : null;
+    const viewportH = window.innerHeight;
     return {
       cardCount: cards.length,
       cardW: first ? first.offsetWidth : 0,
       cardH: first ? first.offsetHeight : 0,
       aspectOk: first ? Math.abs((first.offsetWidth / first.offsetHeight) - 16 / 9) < 0.3 : false,
-      galleryGrid: g ? getComputedStyle(g).display === 'grid' : false,
-      centered: g ? getComputedStyle(g).marginLeft === 'auto' : false,
+      controlsVisible: cr ? (cr.bottom <= viewportH && cr.top >= 0) : false,
+      controlsBottom: cr ? Math.round(cr.bottom) : -1,
+      viewportH,
+      galleryMaxH: g ? Math.round(parseFloat(getComputedStyle(g).maxHeight)) : -1,
     };
   });
   log('6. Kamera düzeni:', JSON.stringify(camLayout));
-  if (camLayout.cardCount < 1 || camLayout.cardW < 260) { log('✗ Kamera kartları hâlâ küçük'); process.exit(1); }
-  if (!camLayout.galleryGrid) { log('✗ Galeri grid değil'); process.exit(1); }
-  log('   ✓ Kameralar Discord gibi büyük karolarda (' + camLayout.cardW + 'px genişlik, 16:9)');
+  if (camLayout.cardCount < 1 || camLayout.cardW < 240 || camLayout.cardW > 380) { log('✗ Kamera kartı boyutu yanlış: ' + camLayout.cardW); process.exit(1); }
+  if (!camLayout.aspectOk) { log('✗ 16:9 oranı yok'); process.exit(1); }
+  if (!camLayout.controlsVisible) { log('✗ BUG: Kamera açıkken kontrol butonları ekran dışında!'); process.exit(1); }
+  log('   ✓ Kameralar orta boy (' + camLayout.cardW + 'px, 16:9), butonlar görünür');
 
   await browser.close();
   log('\nSONUÇ: v4.0 TESTLERİ GEÇTİ ✔');

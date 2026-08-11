@@ -73,6 +73,12 @@ const URL = 'http://localhost:3000';
   // 3) Ses seviyesi: önce A'nın kamerasını kapat (kartı geri gelsin), sonra ikon testi
   await a.evaluate(() => document.querySelector('#cam-btn').click());
   await wait(1000);
+  // B'nin A'nın ses akışını ALDIĞINDAN emin ol (audioEls dolana kadar bekle)
+  for (let i = 0; i < 20; i++) {
+    const n = await b.evaluate(() => window.__nexarc.audioEls.size);
+    if (n >= 1) break;
+    await wait(500);
+  }
   const volBtnExists = await b.evaluate(() => !!document.querySelector('.vol-btn'));
   if (!volBtnExists) { log('✗ Ses ikonu yok'); process.exit(1); }
   // B, A'nın kartındaki 🔊 ikonuna basar
