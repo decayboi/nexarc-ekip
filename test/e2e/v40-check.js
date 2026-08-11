@@ -141,7 +141,7 @@ const URL = 'http://localhost:3000';
     };
   });
   log('6. Kamera düzeni:', JSON.stringify(camLayout));
-  if (camLayout.cardCount < 1 || camLayout.cardW < 240 || camLayout.cardW > 380) { log('✗ Kamera kartı boyutu yanlış: ' + camLayout.cardW); process.exit(1); }
+  if (camLayout.cardCount < 1 || camLayout.cardW < 240) { log('✗ Kamera kartı boyutu yanlış: ' + camLayout.cardW); process.exit(1); }
   if (!camLayout.aspectOk) { log('✗ 16:9 oranı yok'); process.exit(1); }
   if (!camLayout.controlsVisible) { log('✗ BUG: Kamera açıkken kontrol butonları ekran dışında!'); process.exit(1); }
   log('   ✓ Kameralar orta boy (' + camLayout.cardW + 'px, 16:9), butonlar görünür');

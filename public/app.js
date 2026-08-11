@@ -1839,6 +1839,7 @@ function renderCamGallery() {
     return;
   }
   gallery.classList.remove('hidden');
+  gallery.dataset.count = String(entries.length); // dinamik grid şablonu seçimi
   // Mevcut kartları güncelle / yenileri ekle
   for (const { peerId, stream, label } of entries) {
     let card = gallery.querySelector(`.cam-card[data-peer="${peerId}"]`);
