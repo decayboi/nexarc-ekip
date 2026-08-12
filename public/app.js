@@ -1170,6 +1170,7 @@ $('#um-mute').onclick = () => {
 };
 
 function selectTextChannel(channelId) {
+  document.body.classList.remove('in-voice');
   closeMenu(); // mobilde çekmece kapansın
   // Eski kanalın son okunma anını kaydet (yeni ayraç mantığı için)
   if (state.textChannel && state.textChannel !== channelId) {
@@ -1779,6 +1780,7 @@ if (attachBtn && mediaInput) {
    SES GÖRÜNÜMÜ
    ============================================================ */
 function showVoiceView() {
+  document.body.classList.add('in-voice'); // yan paneller gizlenir — kamera alanı büyür
   $('#text-view').classList.add('hidden');
   $('#voice-view').classList.remove('hidden');
   const ch = state.channels.find((c) => c.id === state.voiceChannel);
@@ -2361,6 +2363,7 @@ function joinVoice(channelId) {
 
 /* Ses kanalı durumunu yerel olarak sıfırla (çıkış veya kanal silinmesi) */
 function localVoiceReset(toastMsg) {
+  document.body.classList.remove('in-voice');
   state.wantedVoice = null;
   state.pendingPeers = [];
   for (const id of [...state.voicePCs.keys()]) removePeer(id);
